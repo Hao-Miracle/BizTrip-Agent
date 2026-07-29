@@ -20,6 +20,18 @@ output/差旅汇总_demo_YYYYMMDD.xlsx
 
 这一步不读取 `.env`，也不会连接邮箱。
 
+如果想同时生成本地审阅页面：
+
+```bash
+biztrip demo --review
+```
+
+审阅页面会输出到：
+
+```
+output/review_YYYYMMDD.html
+```
+
 ### 检查本地环境
 
 ```bash
@@ -153,6 +165,7 @@ biztrip scan --start 2026-07-01 --end 2026-07-29
 biztrip scan --count 100
 biztrip scan --no-llm
 biztrip scan --output-dir output/monthly
+biztrip scan --review
 ```
 
 参数说明：
@@ -164,6 +177,9 @@ biztrip scan --output-dir output/monthly
 | `--count N` | 未指定日期时扫描最近 N 封邮件 |
 | `--no-llm` | 强制规则模式，不调用 LLM |
 | `--output-dir PATH` | 指定报表和附件输出目录 |
+| `--review` | 额外生成本地 HTML 审阅页面 |
+
+审阅页面会列出总金额、行程汇总、费用明细，并把缺金额、缺日期、无附件的记录标成需检查。
 
 ### 旧脚本入口
 

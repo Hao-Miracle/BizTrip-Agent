@@ -115,6 +115,12 @@ biztrip demo
 
 这会用虚构差旅数据在 `output/` 目录生成一份示例 Excel，先确认工具链可用。
 
+想先看可审阅页面：
+
+```bash
+biztrip demo --review
+```
+
 ### 4. 配置邮箱
 
 ```bash
@@ -138,6 +144,7 @@ biztrip scan
 biztrip scan --start 2026-07-01 --end 2026-07-29
 biztrip scan --count 100 --no-llm
 biztrip scan --output-dir output/monthly
+biztrip scan --review
 ```
 
 > 旧入口仍可用：`python3 phase1/generate_report.py` 或 `python3 phase2/agent_report.py`。
