@@ -62,7 +62,7 @@ AGGREGATE_PROMPT = """分析以下出差/旅行订单记录，将它们按"行�
 """
 
 
-def aggregate_trips(records):
+def aggregate_trips(records, use_llm=True):
     """
     对所有提取记录进行出差聚合。
 
@@ -75,7 +75,7 @@ def aggregate_trips(records):
     if not records:
         return []
 
-    client = _get_client()
+    client = _get_client() if use_llm else None
 
     # LLM 不可用：简单规则聚合（按日期排序后同一目的地归并）
     if client is None:

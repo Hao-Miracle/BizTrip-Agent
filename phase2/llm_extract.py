@@ -279,7 +279,7 @@ def rule_extract(body, subject, category):
 
 # ====== 主入口 ======
 
-def extract_record(body, subject, category):
+def extract_record(body, subject, category, use_llm=True):
     """
     提取单条记录。
 
@@ -289,7 +289,7 @@ def extract_record(body, subject, category):
     3. LLM 不可用 → 直接正则
     """
     # 先走 LLM
-    llm_result = llm_extract(body, category)
+    llm_result = llm_extract(body, category) if use_llm else None
 
     if llm_result and quality_check(llm_result):
         return llm_result

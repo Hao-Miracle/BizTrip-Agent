@@ -146,6 +146,25 @@ biztrip init    # 创建 .env
 biztrip scan    # 运行交互式邮箱扫描
 ```
 
+`biztrip scan` 默认会询问日期范围，直接回车则扫描最近 60 封邮件。也可以传入参数，跳过交互：
+
+```bash
+biztrip scan --start 2026-07-01 --end 2026-07-29
+biztrip scan --count 100
+biztrip scan --no-llm
+biztrip scan --output-dir output/monthly
+```
+
+参数说明：
+
+| 参数 | 作用 |
+|------|------|
+| `--start YYYY-MM-DD` | 按开始日期过滤邮件 |
+| `--end YYYY-MM-DD` | 按结束日期过滤邮件 |
+| `--count N` | 未指定日期时扫描最近 N 封邮件 |
+| `--no-llm` | 强制规则模式，不调用 LLM |
+| `--output-dir PATH` | 指定报表和附件输出目录 |
+
 ### 旧脚本入口
 
 ```bash

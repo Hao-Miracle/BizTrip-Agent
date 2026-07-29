@@ -132,6 +132,14 @@ biztrip scan
 
 运行后按提示输入日期范围，直接回车扫描最近 60 封邮件。
 
+也可以直接传参数，适合重复运行或自动化：
+
+```bash
+biztrip scan --start 2026-07-01 --end 2026-07-29
+biztrip scan --count 100 --no-llm
+biztrip scan --output-dir output/monthly
+```
+
 > 旧入口仍可用：`python3 phase1/generate_report.py` 或 `python3 phase2/agent_report.py`。
 
 ---

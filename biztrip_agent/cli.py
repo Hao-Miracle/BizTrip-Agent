@@ -31,7 +31,16 @@ def main(argv=None):
 
     subparsers.add_parser("check", help="Check Python version, dependencies, and local config.")
     subparsers.add_parser("init", help="Create .env from .env.example if it does not exist.")
-    subparsers.add_parser("scan", help="Run the existing Agent scanner.")
+    scan_parser = subparsers.add_parser("scan", help="Run the Agent scanner.")
+    scan_parser.add_argument("--start", help="Start date in YYYY-MM-DD format.")
+    scan_parser.add_argument("--end", help="End date in YYYY-MM-DD format.")
+    scan_parser.add_argument("--count", type=int, default=60, help="Number of recent emails to scan when no date range is set.")
+    scan_parser.add_argument("--no-llm", action="store_true", help="Force rule mode even when LLM config is present.")
+    scan_parser.add_argument(
+        "--output-dir",
+        default=str(OUTPUT_DIR),
+        help="Directory for reports and archived attachments. Defaults to ./output.",
+    )
 
     args = parser.parse_args(argv)
     command = args.command or "demo"
@@ -43,7 +52,7 @@ def main(argv=None):
     if command == "init":
         return init_config()
     if command == "scan":
-        return scan()
+        return scan(args)
 
     parser.print_help()
     return 2
@@ -220,15 +229,39 @@ def init_config():
     return 0
 
 
-def scan():
-    """Run the existing interactive scanner."""
+def scan(args):
+    """Run the scanner, interactively by default or non-interactively with options."""
+    if args.count < 1:
+        print("--count must be greater than 0.")
+        return 2
+    for label, value in [("--start", args.start), ("--end", args.end)]:
+        if value and not _is_date(value):
+            print(f"{label} must use YYYY-MM-DD format.")
+            return 2
+
     try:
         from phase2.agent_report import main as agent_main
     except ImportError as exc:
         print(f"Unable to load scanner: {exc}")
         return 1
-    agent_main()
+    interactive = not any([args.start, args.end, args.count != 60, args.no_llm, args.output_dir != str(OUTPUT_DIR)])
+    agent_main(
+        start=args.start,
+        end=args.end,
+        count=args.count,
+        no_llm=args.no_llm,
+        output_dir=args.output_dir,
+        interactive=interactive,
+    )
     return 0
+
+
+def _is_date(value):
+    try:
+        datetime.strptime(value, "%Y-%m-%d")
+    except ValueError:
+        return False
+    return True
 
 
 def _write_header(ws, row, headers, font, fill, alignment, border):
