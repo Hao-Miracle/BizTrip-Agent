@@ -186,6 +186,12 @@ output/
 
 `records_YYYYMMDD.json` 会保留结构化记录、行程分组和生成文件路径，方便后续复查或重新生成报表。
 
+从 JSON 重新生成报表：
+
+```bash
+biztrip rebuild output/records_20260705.json --review
+```
+
 ---
 
 ## 🧠 LLM 增强（可选）

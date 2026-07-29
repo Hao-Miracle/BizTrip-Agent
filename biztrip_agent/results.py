@@ -5,6 +5,9 @@ from datetime import datetime
 from pathlib import Path
 
 
+SCHEMA_VERSION = "biztrip.records.v1"
+
+
 def write_results_json(records, trips, output_dir, scan_label, xlsx_path=None, review_path=None):
     """Write scan results to a JSON file and return its path."""
     output_dir = Path(output_dir)
@@ -13,7 +16,7 @@ def write_results_json(records, trips, output_dir, scan_label, xlsx_path=None, r
     path = output_dir / f"records_{datetime.now().strftime('%Y%m%d')}.json"
 
     payload = {
-        "schema_version": "biztrip.records.v1",
+        "schema_version": SCHEMA_VERSION,
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "scan_label": scan_label,
         "summary": {
@@ -30,3 +33,17 @@ def write_results_json(records, trips, output_dir, scan_label, xlsx_path=None, r
     }
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     return path
+
+
+def load_results_json(path):
+    """Load and validate a BizTrip results JSON file."""
+    path = Path(path)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    schema_version = payload.get("schema_version")
+    if schema_version != SCHEMA_VERSION:
+        raise ValueError(f"Unsupported results schema: {schema_version or 'missing'}")
+    if not isinstance(payload.get("records"), list):
+        raise ValueError("Invalid results file: records must be a list")
+    if not isinstance(payload.get("trips"), list):
+        raise ValueError("Invalid results file: trips must be a list")
+    return payload
