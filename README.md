@@ -149,6 +149,15 @@ biztrip scan --review
 
 > 旧入口仍可用：`python3 phase1/generate_report.py` 或 `python3 phase2/agent_report.py`。
 
+### 6. 运行测试
+
+```bash
+pip install -e ".[test]"
+pytest
+```
+
+测试使用虚构样本，不会连接邮箱。
+
 ---
 
 ## 📊 输出效果

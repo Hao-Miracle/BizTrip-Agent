@@ -188,6 +188,15 @@ python3 phase1/generate_report.py
 python3 phase2/agent_report.py
 ```
 
+## 运行测试
+
+```bash
+pip install -e ".[test]"
+pytest
+```
+
+测试使用虚构样本，覆盖分类、字段提取、出差聚合、Demo Excel 和 HTML 审阅页，不会连接真实邮箱。
+
 ---
 
 ## 隐私与安全
