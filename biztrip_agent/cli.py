@@ -34,6 +34,10 @@ def main(argv=None):
     subparsers.add_parser("check", help="Check Python version, dependencies, and local config.")
     subparsers.add_parser("init", help="Create .env from .env.example if it does not exist.")
     subparsers.add_parser("wizard", help="Start a guided local workflow.")
+    web_parser = subparsers.add_parser("web", help="Start a local web interface.")
+    web_parser.add_argument("--host", default="127.0.0.1", help="Host to bind. Defaults to 127.0.0.1.")
+    web_parser.add_argument("--port", type=int, default=8765, help="Port to bind. Defaults to 8765.")
+    web_parser.add_argument("--no-open", action="store_true", help="Do not open a browser automatically.")
     scan_parser = subparsers.add_parser("scan", help="Run the Agent scanner.")
     scan_parser.add_argument("--start", help="Start date in YYYY-MM-DD format.")
     scan_parser.add_argument("--end", help="End date in YYYY-MM-DD format.")
@@ -64,6 +68,8 @@ def main(argv=None):
         return init_config()
     if command == "wizard":
         return wizard()
+    if command == "web":
+        return web(args)
     if command == "scan":
         return scan(args)
     if command == "rebuild":
@@ -285,6 +291,19 @@ def wizard():
 
     print("Please choose 1, 2, 3, or 4.")
     return 2
+
+
+def web(args):
+    """Run the local web UI."""
+    if args.port < 1 or args.port > 65535:
+        print("--port must be between 1 and 65535.")
+        return 2
+    try:
+        from biztrip_agent.web import run_server
+    except ImportError as exc:
+        print(f"Unable to load web UI: {exc}")
+        return 1
+    return run_server(host=args.host, port=args.port, open_browser=not args.no_open)
 
 
 def scan(args):

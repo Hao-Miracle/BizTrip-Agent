@@ -6,6 +6,20 @@
 
 ## 快速开始
 
+### 本地 Web 工作台
+
+```bash
+biztrip web
+```
+
+`web` 会启动只绑定本机的页面，用表单生成 Demo 或从已有 `records_YYYYMMDD.json` 重新生成报表。它不会读取邮箱，也不会修改邮箱配置。
+
+如果不想自动打开浏览器：
+
+```bash
+biztrip web --no-open
+```
+
 ### 引导模式
 
 ```bash
@@ -177,6 +191,7 @@ biztrip demo    # 生成示例 Excel，不连接邮箱
 biztrip check   # 检查环境和配置
 biztrip init    # 创建 .env
 biztrip wizard  # 引导式本地流程
+biztrip web     # 本地 Web 工作台
 biztrip scan    # 运行交互式邮箱扫描
 ```
 

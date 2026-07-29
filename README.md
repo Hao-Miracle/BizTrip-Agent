@@ -109,6 +109,14 @@ pip install -e .
 
 ### 3. 先跑 Demo（不需要邮箱）
 
+想用网页操作时，启动本地工作台：
+
+```bash
+biztrip web
+```
+
+它会打开本地页面，用按钮生成 Demo 或从 `records_YYYYMMDD.json` 重新生成报表。
+
 不熟悉命令行参数时，先用引导模式：
 
 ```bash
