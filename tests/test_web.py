@@ -5,7 +5,7 @@ from threading import Thread
 from http.server import ThreadingHTTPServer
 
 from biztrip_agent.cli import main
-from biztrip_agent.web import BizTripWebHandler, _run_demo, render_home
+from biztrip_agent.web import BizTripWebHandler, _run_demo, readiness_status, render_home
 
 
 def test_web_home_contains_local_workflows():
@@ -14,6 +14,8 @@ def test_web_home_contains_local_workflows():
     assert "BizTrip Agent" in html
     assert 'action="/demo"' in html
     assert 'action="/rebuild"' in html
+    assert 'action="/init"' in html
+    assert "本地就绪检查" in html
     assert "records_YYYYMMDD.json" in html
 
 
@@ -28,6 +30,28 @@ def test_web_demo_form_generates_files(tmp_path):
     assert "Demo 已生成" in html
     assert (tmp_path / f"差旅汇总_demo_{today}.xlsx").exists()
     assert (tmp_path / f"review_{today}.html").exists()
+
+
+def test_readiness_status_does_not_expose_secret_values(tmp_path):
+    (tmp_path / ".env").write_text(
+        "\n".join(
+            [
+                "EMAIL_ACCOUNT=user@example.com",
+                "EMAIL_PASSWORD=super-secret-mail-token",
+                "LLM_API_KEY=sk-super-secret",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    statuses = readiness_status(tmp_path)
+    rendered = render_home()
+
+    assert any(item["label"] == "邮箱授权码" and item["detail"] == "已填写" for item in statuses)
+    assert "super-secret-mail-token" not in str(statuses)
+    assert "sk-super-secret" not in str(statuses)
+    assert "super-secret-mail-token" not in rendered
+    assert "sk-super-secret" not in rendered
 
 
 def test_web_home_supports_head_request():
