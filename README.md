@@ -115,7 +115,7 @@ pip install -e .
 biztrip web
 ```
 
-它会打开本地页面，用按钮扫描邮箱、生成 Demo，或从 `records_YYYYMMDD.json` 重新生成报表。
+它会打开本地页面。账号只配置一次；每次扫描时选择最近邮件数量或日期范围，系统会自动选择 IMAP 服务器。也可以生成 Demo，或从 `records_YYYYMMDD.json` 重新生成报表。
 页面也会显示 Python、依赖和 `.env` 配置状态，但不会展示邮箱授权码或 API Key。
 真实扫描会在后台运行，页面会显示任务状态、错误原因和生成文件。
 
