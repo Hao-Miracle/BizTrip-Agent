@@ -648,6 +648,11 @@ def _preflight_scan(output_dir):
 def _friendly_error(exc):
     text = str(exc)
     lowered = text.lower()
+    if "help.mail.qq.com/detail/108/1023" in lowered or "account is abnormal" in lowered:
+        return (
+            "QQ 邮箱登录失败：请确认已在 QQ 邮箱设置中开启 IMAP/SMTP 服务，并使用 QQ 邮箱生成的授权码，"
+            "不是 QQ 登录密码；如果刚连续失败多次，请等待几分钟后再试。"
+        )
     if "authentication" in lowered or "login" in lowered or "password" in lowered:
         return "邮箱登录失败：请确认邮箱授权码正确，并且 IMAP 服务已开启。"
     if "imap" in lowered:

@@ -135,6 +135,12 @@ def test_result_summary_reads_latest_records_json(tmp_path):
 
 
 def test_friendly_error_maps_common_failures():
+    qq_error = (
+        "Login fail. Account is abnormal, service is not open, password is incorrect, "
+        "login frequency limited, or system is busy. More information at "
+        "https://help.mail.qq.com/detail/108/1023"
+    )
+    assert "QQ 邮箱登录失败" in _friendly_error(RuntimeError(qq_error))
     assert "邮箱登录失败" in _friendly_error(RuntimeError("authentication failed"))
     assert "网络连接失败" in _friendly_error(RuntimeError("timed out"))
 
