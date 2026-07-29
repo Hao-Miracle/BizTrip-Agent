@@ -45,6 +45,20 @@ cd BizTrip-Agent
 
 ## 安装依赖
 
+### 推荐：安装为本地命令
+
+```bash
+pipx install -e .
+biztrip web
+```
+
+如果没有 `pipx`，也可以用当前 Python 环境：
+
+```bash
+pip install -e .
+biztrip web
+```
+
 ### 规则模式（零 API Key，推荐先试用）
 
 ```bash
@@ -101,10 +115,17 @@ LLM_MODEL=deepseek-chat
 运行以下命令验证是否正常：
 
 ```bash
-python3 phase1/generate_report.py
+biztrip web
 ```
 
-如果提示输入日期范围，说明安装成功！直接回车扫描最近 60 封邮件。
+如果浏览器打开本地工作台，并显示 Python、依赖和 `.env` 状态，说明安装成功。你可以先生成 Demo，再配置邮箱扫描真实邮件。
+
+命令行验证也可以运行：
+
+```bash
+biztrip check
+biztrip demo --review
+```
 
 ---
 
@@ -135,3 +156,13 @@ A: 升级 Python 到 3.8 或更高版本。推荐使用 [pyenv](https://github.c
 - 阅读 [使用指南](usage.md) 了解详细功能
 - 查看 [常见问题](faq.md) 获取更多帮助
 - 加入 [Discussions](../../discussions) 交流
+
+## 发布检查清单
+
+发布新版本前建议确认：
+
+1. 更新 `pyproject.toml` 版本号
+2. 更新 `CHANGELOG.md`
+3. 运行 `pytest`
+4. 运行 `biztrip web --no-open` 并确认本地页面可打开
+5. 在 GitHub 创建 Release，并附上安装命令和主要变更
