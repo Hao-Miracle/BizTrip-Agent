@@ -11,11 +11,14 @@ from biztrip_agent.web import (
     _friendly_error,
     _job_snapshot,
     _preflight_scan,
+    _read_env_values,
     _result_summary,
+    _run_config,
     _run_demo,
     _run_scan,
     _start_job,
     _validate_scan_inputs,
+    _write_env_values,
     readiness_status,
     render_home,
 )
@@ -29,6 +32,8 @@ def test_web_home_contains_local_workflows():
     assert 'action="/rebuild"' in html
     assert 'action="/scan"' in html
     assert 'action="/init"' in html
+    assert 'action="/config"' in html
+    assert "邮箱配置" in html
     assert "本地就绪检查" in html
     assert "records_YYYYMMDD.json" in html
 
@@ -93,7 +98,9 @@ def test_web_scan_form_passes_safe_args(monkeypatch, tmp_path):
     assert "LLM_API_KEY" not in str(snapshot)
 
 
-def test_scan_preflight_requires_email_config(tmp_path):
+def test_scan_preflight_requires_email_config(monkeypatch, tmp_path):
+    monkeypatch.setattr("biztrip_agent.web._env_path", lambda: tmp_path / ".env")
+
     assert _preflight_scan(tmp_path) == "请先在 .env 中填写 EMAIL_ACCOUNT。"
 
 
@@ -152,6 +159,46 @@ def test_readiness_status_does_not_expose_secret_values(tmp_path):
     assert "sk-super-secret" not in str(statuses)
     assert "super-secret-mail-token" not in rendered
     assert "sk-super-secret" not in rendered
+
+
+def test_env_writer_preserves_comments_and_updates_values(tmp_path):
+    env_path = tmp_path / ".env"
+    env_path.write_text("# config\nEMAIL_ACCOUNT=old@example.com\nEMAIL_PASSWORD=old-token\n", encoding="utf-8")
+
+    _write_env_values(env_path, {"EMAIL_ACCOUNT": "new@example.com", "IMAP_SERVER": "imap.example.com"})
+
+    text = env_path.read_text(encoding="utf-8")
+    assert "# config" in text
+    assert "EMAIL_ACCOUNT=new@example.com" in text
+    assert "EMAIL_PASSWORD=old-token" in text
+    assert "IMAP_SERVER=imap.example.com" in text
+    assert _read_env_values(env_path)["EMAIL_ACCOUNT"] == "new@example.com"
+
+
+def test_config_form_saves_without_overwriting_blank_secrets(monkeypatch, tmp_path):
+    env_path = tmp_path / ".env"
+    env_path.write_text("EMAIL_ACCOUNT=old@example.com\nEMAIL_PASSWORD=keep-me\nLLM_API_KEY=keep-key\n", encoding="utf-8")
+    monkeypatch.setattr("biztrip_agent.web._env_path", lambda: env_path)
+
+    html = _run_config(
+        {
+            "EMAIL_ACCOUNT": "user@example.com",
+            "EMAIL_PASSWORD": "",
+            "IMAP_SERVER": "imap.example.com",
+            "LLM_API_KEY": "",
+            "LLM_BASE_URL": "https://api.example.com/v1",
+            "LLM_MODEL": "example-chat",
+        }
+    )
+
+    values = _read_env_values(env_path)
+    assert "配置已保存" in html
+    assert values["EMAIL_ACCOUNT"] == "user@example.com"
+    assert values["EMAIL_PASSWORD"] == "keep-me"
+    assert values["LLM_API_KEY"] == "keep-key"
+    assert values["IMAP_SERVER"] == "imap.example.com"
+    assert "keep-me" not in html
+    assert "keep-key" not in html
 
 
 def test_web_home_supports_head_request():

@@ -76,6 +76,9 @@ class BizTripWebHandler(BaseHTTPRequestHandler):
         if self.path == "/init":
             self._send_html(_run_init())
             return
+        if self.path == "/config":
+            self._send_html(_run_config(form))
+            return
         self.send_error(404)
 
     def log_message(self, format, *args):
@@ -110,6 +113,7 @@ def render_home(message=None, error=None, files=None, result_summary=None):
         message_html = f'<div class="notice bad">{html.escape(error)}</div>'
     files_html = _files_html(files or [])
     readiness_html = _readiness_html(readiness_status())
+    config_html = _config_html()
     recent_html = _recent_results_html()
     summary_html = _summary_html(result_summary)
     return f"""<!doctype html>
@@ -258,6 +262,17 @@ def render_home(message=None, error=None, files=None, result_summary=None):
       background: #fff;
       color: var(--text);
     }}
+    .config {{
+      grid-column: 1 / -1;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      padding: 16px 18px;
+    }}
+    .config-grid {{
+      display: grid;
+      grid-template-columns: repeat(2, minmax(220px, 1fr));
+      gap: 12px;
+    }}
     @media (max-width: 760px) {{
       header, main {{ padding-left: 16px; padding-right: 16px; }}
       main {{ grid-template-columns: 1fr; }}
@@ -281,6 +296,7 @@ def render_home(message=None, error=None, files=None, result_summary=None):
       <div id="job-files"></div>
     </section>
     {readiness_html}
+    {config_html}
     <section>
       <h2>扫描邮箱</h2>
       <form method="post" action="/scan" data-background="true">
@@ -424,6 +440,10 @@ def _dependency_status():
     return rows
 
 
+def _env_path():
+    return Path(__file__).resolve().parents[1] / ".env"
+
+
 def _read_env_flags(env_path):
     if not env_path.exists():
         return {}
@@ -435,6 +455,43 @@ def _read_env_flags(env_path):
         key, value = stripped.split("=", 1)
         flags[key.strip()] = bool(value.strip().strip("\"'"))
     return flags
+
+
+def _read_env_values(env_path):
+    if not env_path.exists():
+        return {}
+    values = {}
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        values[key.strip()] = value.strip().strip("\"'")
+    return values
+
+
+def _write_env_values(env_path, updates):
+    env_path = Path(env_path)
+    env_path.parent.mkdir(parents=True, exist_ok=True)
+    existing_lines = env_path.read_text(encoding="utf-8").splitlines() if env_path.exists() else []
+    seen = set()
+    lines = []
+    for line in existing_lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            lines.append(line)
+            continue
+        key, _value = stripped.split("=", 1)
+        key = key.strip()
+        if key in updates:
+            lines.append(f"{key}={updates[key]}")
+            seen.add(key)
+        else:
+            lines.append(line)
+    for key, value in updates.items():
+        if key not in seen:
+            lines.append(f"{key}={value}")
+    env_path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
 
 
 def _run_demo(form):
@@ -572,7 +629,7 @@ def _trim_jobs():
 
 
 def _preflight_scan(output_dir):
-    env_flags = _read_env_flags(Path(__file__).resolve().parents[1] / ".env")
+    env_flags = _read_env_flags(_env_path())
     if not env_flags.get("EMAIL_ACCOUNT"):
         return "请先在 .env 中填写 EMAIL_ACCOUNT。"
     if not env_flags.get("EMAIL_PASSWORD"):
@@ -618,15 +675,32 @@ def _validate_scan_inputs(start, end, count_value):
 
 
 def _run_init():
-    project_dir = Path(__file__).resolve().parents[1]
-    env_path = project_dir / ".env"
-    example_path = project_dir / ".env.example"
+    env_path = _env_path()
+    example_path = env_path.parent / ".env.example"
     if env_path.exists():
         return render_home(message=".env 已存在，不会覆盖现有配置。")
     if not example_path.exists():
         return render_home(error="未找到 .env.example，无法生成模板。")
     shutil.copyfile(example_path, env_path)
     return render_home(message=".env 模板已创建。请在本地编辑邮箱账号和授权码。")
+
+
+def _run_config(form):
+    env_path = _env_path()
+    updates = {}
+    plain_fields = ["EMAIL_ACCOUNT", "IMAP_SERVER", "LLM_BASE_URL", "LLM_MODEL"]
+    secret_fields = ["EMAIL_PASSWORD", "LLM_API_KEY"]
+    for key in plain_fields:
+        value = form.get(key, "").strip()
+        updates[key] = value
+    for key in secret_fields:
+        value = form.get(key, "").strip()
+        if value:
+            updates[key] = value
+    if not updates.get("EMAIL_ACCOUNT"):
+        return render_home(error="邮箱账号不能为空。")
+    _write_env_values(env_path, updates)
+    return render_home(message="配置已保存。密码和 API Key 不会在页面显示。")
 
 
 def _latest_files(output_dir):
@@ -720,3 +794,46 @@ def _readiness_html(statuses):
         "</form>"
         "</section>"
     )
+
+
+def _config_html():
+    values = _read_env_values(_env_path())
+    return f"""
+    <section class="config">
+      <h2>邮箱配置</h2>
+      <div class="sub">在本机浏览器填写并保存到 .env。授权码和 API Key 留空表示保留原值，页面不会回显。</div>
+      <form method="post" action="/config">
+        <div class="config-grid">
+          <div>
+            <label for="cfg-email">邮箱账号</label>
+            <input id="cfg-email" name="EMAIL_ACCOUNT" type="text" value="{html.escape(values.get("EMAIL_ACCOUNT", ""))}">
+          </div>
+          <div>
+            <label for="cfg-password">邮箱授权码</label>
+            <input id="cfg-password" name="EMAIL_PASSWORD" type="password" placeholder="{_secret_placeholder(values.get("EMAIL_PASSWORD"))}">
+          </div>
+          <div>
+            <label for="cfg-imap">IMAP 服务器</label>
+            <input id="cfg-imap" name="IMAP_SERVER" type="text" value="{html.escape(values.get("IMAP_SERVER", ""))}" placeholder="可留空自动推断">
+          </div>
+          <div>
+            <label for="cfg-key">LLM API Key（可选）</label>
+            <input id="cfg-key" name="LLM_API_KEY" type="password" placeholder="{_secret_placeholder(values.get("LLM_API_KEY"))}">
+          </div>
+          <div>
+            <label for="cfg-base">LLM Base URL（可选）</label>
+            <input id="cfg-base" name="LLM_BASE_URL" type="text" value="{html.escape(values.get("LLM_BASE_URL", ""))}">
+          </div>
+          <div>
+            <label for="cfg-model">LLM Model（可选）</label>
+            <input id="cfg-model" name="LLM_MODEL" type="text" value="{html.escape(values.get("LLM_MODEL", ""))}">
+          </div>
+        </div>
+        <button type="submit">保存配置</button>
+      </form>
+    </section>
+"""
+
+
+def _secret_placeholder(value):
+    return "已填写，留空保留" if value else "未填写"
