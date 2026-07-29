@@ -109,6 +109,14 @@ pip install -e .
 
 ### 3. 先跑 Demo（不需要邮箱）
 
+不熟悉命令行参数时，先用引导模式：
+
+```bash
+biztrip wizard
+```
+
+按提示选择生成 Demo、从 JSON 重新生成报表，或检查本地环境。
+
 ```bash
 biztrip demo
 ```

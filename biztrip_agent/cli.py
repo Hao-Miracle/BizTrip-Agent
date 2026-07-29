@@ -33,6 +33,7 @@ def main(argv=None):
 
     subparsers.add_parser("check", help="Check Python version, dependencies, and local config.")
     subparsers.add_parser("init", help="Create .env from .env.example if it does not exist.")
+    subparsers.add_parser("wizard", help="Start a guided local workflow.")
     scan_parser = subparsers.add_parser("scan", help="Run the Agent scanner.")
     scan_parser.add_argument("--start", help="Start date in YYYY-MM-DD format.")
     scan_parser.add_argument("--end", help="End date in YYYY-MM-DD format.")
@@ -61,6 +62,8 @@ def main(argv=None):
         return check()
     if command == "init":
         return init_config()
+    if command == "wizard":
+        return wizard()
     if command == "scan":
         return scan(args)
     if command == "rebuild":
@@ -252,6 +255,38 @@ def init_config():
     return 0
 
 
+def wizard():
+    """Guide non-technical users through the safest local workflows."""
+    print("BizTrip Agent wizard")
+    print("1. Generate a demo report")
+    print("2. Rebuild reports from an existing records JSON")
+    print("3. Check local environment")
+    print("4. Exit")
+
+    choice = input("Choose 1-4 [1]: ").strip() or "1"
+    if choice == "1":
+        output_dir = input(f"Output directory [{OUTPUT_DIR}]: ").strip() or str(OUTPUT_DIR)
+        review = _confirm("Also create a review page?", default=True)
+        return demo(Path(output_dir), review=review)
+    if choice == "2":
+        json_path = input("Path to records_YYYYMMDD.json: ").strip()
+        if not json_path:
+            print("A JSON path is required.")
+            return 2
+        output_dir = input("Output directory [same as JSON file]: ").strip()
+        review = _confirm("Also create a review page?", default=True)
+        args = argparse.Namespace(json_path=json_path, output_dir=output_dir or None, review=review)
+        return rebuild(args)
+    if choice == "3":
+        return check()
+    if choice == "4":
+        print("No changes made.")
+        return 0
+
+    print("Please choose 1, 2, 3, or 4.")
+    return 2
+
+
 def scan(args):
     """Run the scanner, interactively by default or non-interactively with options."""
     if args.count < 1:
@@ -338,6 +373,14 @@ def _is_date(value):
     except ValueError:
         return False
     return True
+
+
+def _confirm(prompt, default=False):
+    suffix = "Y/n" if default else "y/N"
+    answer = input(f"{prompt} [{suffix}]: ").strip().lower()
+    if not answer:
+        return default
+    return answer in {"y", "yes"}
 
 
 def _write_header(ws, row, headers, font, fill, alignment, border):

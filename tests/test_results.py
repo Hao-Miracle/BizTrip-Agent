@@ -83,3 +83,32 @@ def test_rebuild_generates_excel_and_review_from_json(tmp_path):
     workbook = load_workbook(workbook_path, data_only=True)
     assert workbook["报销总览"]["D4"].value == "¥ 1,878.00"
     assert "深圳出差" in review_path.read_text(encoding="utf-8")
+
+
+def test_wizard_rebuilds_from_json(tmp_path, monkeypatch):
+    records = [
+        {"分类": "机票", "金额": 1280.0, "日期": "2026-07-10", "平台": "去哪儿网", "方法": "规则", "附件": "flight.pdf"},
+    ]
+    trips = [
+        {
+            "trip_id": 1,
+            "destination": "深圳",
+            "start_date": "2026-07-10",
+            "end_date": "2026-07-10",
+            "summary": "深圳出差",
+            "records": records,
+            "total": 1280.0,
+            "method": "规则",
+        }
+    ]
+    source_json = write_results_json(records, trips, tmp_path / "source", "测试范围")
+    rebuild_dir = tmp_path / "rebuilt"
+    answers = iter(["2", str(source_json), str(rebuild_dir), "y"])
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
+
+    exit_code = main(["wizard"])
+
+    today = datetime.now().strftime("%Y%m%d")
+    assert exit_code == 0
+    assert (rebuild_dir / f"差旅汇总_{today}.xlsx").exists()
+    assert (rebuild_dir / f"review_{today}.html").exists()

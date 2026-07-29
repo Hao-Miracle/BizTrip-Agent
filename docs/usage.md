@@ -6,6 +6,14 @@
 
 ## 快速开始
 
+### 引导模式
+
+```bash
+biztrip wizard
+```
+
+`wizard` 会用问答方式引导你生成 Demo、从已有 `records_YYYYMMDD.json` 重新生成报表，或检查本地环境。它不会读取邮箱，也不会修改邮箱配置。
+
 ### 先跑 Demo（不需要邮箱）
 
 ```bash
@@ -168,6 +176,7 @@ biztrip rebuild output/records_YYYYMMDD.json --output-dir output/rebuilt
 biztrip demo    # 生成示例 Excel，不连接邮箱
 biztrip check   # 检查环境和配置
 biztrip init    # 创建 .env
+biztrip wizard  # 引导式本地流程
 biztrip scan    # 运行交互式邮箱扫描
 ```
 
