@@ -6,6 +6,36 @@
 
 ## 快速开始
 
+### 先跑 Demo（不需要邮箱）
+
+```bash
+biztrip demo
+```
+
+运行后会用虚构差旅数据生成示例报表：
+
+```
+output/差旅汇总_demo_YYYYMMDD.xlsx
+```
+
+这一步不读取 `.env`，也不会连接邮箱。
+
+### 检查本地环境
+
+```bash
+biztrip check
+```
+
+检查 Python 版本、必需依赖，以及 `.env` 是否存在。
+
+### 初始化配置
+
+```bash
+biztrip init
+```
+
+该命令会从 `.env.example` 创建 `.env`。编辑 `.env` 后再扫描真实邮箱。
+
 ### 规则模式（零 API Key）
 
 ```bash
@@ -21,7 +51,7 @@ python3 phase1/generate_report.py
 ### Agent 模式（LLM 增强）
 
 ```bash
-python3 phase2/agent_report.py
+biztrip scan
 ```
 
 Agent 模式在规则模式基础上增加：
@@ -30,6 +60,12 @@ Agent 模式在规则模式基础上增加：
 - 🌍 自动出差聚合（按时间+目的地归并）
 
 > 未配置 `LLM_API_KEY` 时自动降级为规则模式，零成本可用。
+
+旧入口仍可用：
+
+```bash
+python3 phase2/agent_report.py
+```
 
 ---
 
@@ -99,26 +135,22 @@ output/
 
 ---
 
-## 命令行参数
+## 命令行命令
 
-### generate_report.py
+### biztrip
 
 ```bash
-# 扫描指定日期范围
-python3 phase1/generate_report.py --start 2026-06-01 --end 2026-06-30
-
-# 指定扫描数量
-python3 phase1/generate_report.py --count 100
+biztrip demo    # 生成示例 Excel，不连接邮箱
+biztrip check   # 检查环境和配置
+biztrip init    # 创建 .env
+biztrip scan    # 运行交互式邮箱扫描
 ```
 
-### agent_report.py
+### 旧脚本入口
 
 ```bash
-# 禁用 LLM，强制规则模式
-python3 phase2/agent_report.py --no-llm
-
-# 指定扫描数量
-python3 phase2/agent_report.py --count 100
+python3 phase1/generate_report.py
+python3 phase2/agent_report.py
 ```
 
 ---

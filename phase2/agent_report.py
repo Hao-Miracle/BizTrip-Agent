@@ -41,10 +41,15 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from common.utils import decode_str, get_email_config
 from common.email_parser import get_email_text
 
-# Phase 2 LLM 模块
-from llm_classify import classify_email, has_api_key as llm_available
-from llm_extract import extract_record
-from llm_aggregate import aggregate_trips
+# Phase 2 LLM 模块。兼容脚本运行和安装后包导入。
+try:
+    from .llm_classify import classify_email, has_api_key as llm_available
+    from .llm_extract import extract_record
+    from .llm_aggregate import aggregate_trips
+except ImportError:
+    from llm_classify import classify_email, has_api_key as llm_available
+    from llm_extract import extract_record
+    from llm_aggregate import aggregate_trips
 
 PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUTPUT_DIR = os.path.join(PROJECT_DIR, 'output')
