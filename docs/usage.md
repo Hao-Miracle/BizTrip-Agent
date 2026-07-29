@@ -107,6 +107,16 @@ output/
 
 `records_YYYYMMDD.json` 是中间结果文件，包含提取记录、行程分组、总金额和生成文件路径。后续复查问题或重新生成报表时，可以优先复用这个文件，避免反复扫描邮箱。
 
+### 从 JSON 重新生成
+
+```bash
+biztrip rebuild output/records_YYYYMMDD.json
+biztrip rebuild output/records_YYYYMMDD.json --review
+biztrip rebuild output/records_YYYYMMDD.json --output-dir output/rebuilt
+```
+
+`rebuild` 不会连接邮箱，只读取已保存的 JSON 结果，重新生成 Excel 和可选的 HTML 审阅页。
+
 ---
 
 ## 支持的平台

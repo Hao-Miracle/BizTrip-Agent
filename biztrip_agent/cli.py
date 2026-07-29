@@ -2,6 +2,7 @@
 
 import argparse
 import importlib.util
+import json
 import os
 import shutil
 import sys
@@ -43,6 +44,13 @@ def main(argv=None):
         default=str(OUTPUT_DIR),
         help="Directory for reports and archived attachments. Defaults to ./output.",
     )
+    rebuild_parser = subparsers.add_parser("rebuild", help="Regenerate reports from a records JSON file.")
+    rebuild_parser.add_argument("json_path", help="Path to records_YYYYMMDD.json.")
+    rebuild_parser.add_argument("--review", action="store_true", help="Also regenerate a local HTML review page.")
+    rebuild_parser.add_argument(
+        "--output-dir",
+        help="Directory for regenerated files. Defaults to the JSON file directory.",
+    )
 
     args = parser.parse_args(argv)
     command = args.command or "demo"
@@ -55,6 +63,8 @@ def main(argv=None):
         return init_config()
     if command == "scan":
         return scan(args)
+    if command == "rebuild":
+        return rebuild(args)
 
     parser.print_help()
     return 2
@@ -271,6 +281,54 @@ def scan(args):
         print(f"Review: {result['review_path']}")
     if result and result.get("results_path"):
         print(f"JSON: {result['results_path']}")
+    return 0
+
+
+def rebuild(args):
+    """Regenerate Excel and optional review HTML from a saved JSON result."""
+    try:
+        from biztrip_agent.results import load_results_json, write_results_json
+        from phase2.agent_report import _generate_excel
+    except ImportError as exc:
+        print(f"Unable to load rebuild tools: {exc}")
+        return 1
+
+    json_path = Path(args.json_path)
+    if not json_path.exists():
+        print(f"JSON file not found: {json_path}")
+        return 2
+
+    try:
+        payload = load_results_json(json_path)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        print(f"Unable to read results JSON: {exc}")
+        return 2
+
+    output_dir = Path(args.output_dir) if args.output_dir else json_path.parent
+    records = payload["records"]
+    trips = payload["trips"]
+    scan_label = payload.get("scan_label") or "JSON rebuild"
+    xlsx_path = _generate_excel(
+        records,
+        trips,
+        payload.get("summary", {}).get("total_amount", 0),
+        scan_label,
+        output_dir=str(output_dir),
+        use_llm=False,
+    )
+
+    review_path = None
+    if args.review:
+        from biztrip_agent.review import generate_review_html
+
+        review_path = generate_review_html(records, trips, output_dir, scan_label, excel_path=xlsx_path)
+
+    results_path = write_results_json(records, trips, output_dir, scan_label, xlsx_path=xlsx_path, review_path=review_path)
+    print("Reports rebuilt from JSON.")
+    print(f"Excel: {xlsx_path}")
+    if review_path:
+        print(f"Review: {review_path}")
+    print(f"JSON: {results_path}")
     return 0
 
 
