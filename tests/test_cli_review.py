@@ -26,6 +26,18 @@ def test_demo_generates_excel_and_review(tmp_path):
     assert "未发现明显缺失字段" in html
 
 
+def test_wizard_generates_demo_with_review(tmp_path, monkeypatch):
+    answers = iter(["1", str(tmp_path), "y"])
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
+
+    exit_code = main(["wizard"])
+
+    today = datetime.now().strftime("%Y%m%d")
+    assert exit_code == 0
+    assert (tmp_path / f"差旅汇总_demo_{today}.xlsx").exists()
+    assert (tmp_path / f"review_{today}.html").exists()
+
+
 def test_review_flags_missing_fields(tmp_path):
     records = [
         {
