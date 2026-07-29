@@ -56,6 +56,9 @@ class BizTripWebHandler(BaseHTTPRequestHandler):
         if self.path == "/rebuild":
             self._send_html(_run_rebuild(form))
             return
+        if self.path == "/scan":
+            self._send_html(_run_scan(form))
+            return
         if self.path == "/init":
             self._send_html(_run_init())
             return
@@ -138,6 +141,14 @@ def render_home(message=None, error=None, files=None):
       font: inherit;
       background: #fff;
     }}
+    input[type="number"] {{
+      width: 100%;
+      min-height: 38px;
+      border: 1px solid var(--line);
+      padding: 8px 10px;
+      font: inherit;
+      background: #fff;
+    }}
     .check {{ display: flex; align-items: center; gap: 8px; margin-top: 12px; color: var(--text); }}
     button {{
       margin-top: 16px;
@@ -210,6 +221,22 @@ def render_home(message=None, error=None, files=None):
     {message_html}
     {files_html}
     {readiness_html}
+    <section>
+      <h2>扫描邮箱</h2>
+      <form method="post" action="/scan">
+        <label for="scan-start">开始日期</label>
+        <input id="scan-start" name="start" type="text" placeholder="YYYY-MM-DD，可留空">
+        <label for="scan-end">结束日期</label>
+        <input id="scan-end" name="end" type="text" placeholder="YYYY-MM-DD，可留空">
+        <label for="scan-count">扫描邮件数量</label>
+        <input id="scan-count" name="count" type="number" min="1" value="60">
+        <label for="scan-output">输出目录</label>
+        <input id="scan-output" name="output_dir" type="text" value="output">
+        <label class="check"><input name="review" type="checkbox" checked> 同时生成审阅页面</label>
+        <label class="check"><input name="no_llm" type="checkbox"> 只用规则模式</label>
+        <button type="submit">开始扫描</button>
+      </form>
+    </section>
     <section>
       <h2>生成 Demo</h2>
       <form method="post" action="/demo">
@@ -331,6 +358,46 @@ def _run_rebuild(form):
         return render_home(error="重建失败，请确认 JSON 路径正确。")
     target_dir = Path(output_dir) if output_dir else Path(json_path).parent
     return render_home(message="报表已重建。", files=_latest_files(target_dir))
+
+
+def _run_scan(form):
+    from biztrip_agent.cli import OUTPUT_DIR, scan
+
+    start = form.get("start", "").strip() or None
+    end = form.get("end", "").strip() or None
+    count_value = form.get("count", "").strip() or "60"
+    output_dir = form.get("output_dir", "").strip() or str(OUTPUT_DIR)
+    error = _validate_scan_inputs(start, end, count_value)
+    if error:
+        return render_home(error=error)
+
+    args = argparse.Namespace(
+        start=start,
+        end=end,
+        count=int(count_value),
+        no_llm=form.get("no_llm") == "on",
+        review=form.get("review") == "on",
+        output_dir=output_dir,
+    )
+    exit_code = scan(args)
+    if exit_code != 0:
+        return render_home(error="扫描失败，请确认本地配置和终端错误信息。")
+    return render_home(message="扫描完成。", files=_latest_files(output_dir))
+
+
+def _validate_scan_inputs(start, end, count_value):
+    from biztrip_agent.cli import _is_date
+
+    for label, value in [("开始日期", start), ("结束日期", end)]:
+        if value and not _is_date(value):
+            return f"{label}必须使用 YYYY-MM-DD 格式。"
+    try:
+        count = int(count_value)
+    except ValueError:
+        return "扫描邮件数量必须是整数。"
+    if count < 1:
+        return "扫描邮件数量必须大于 0。"
+    return None
 
 
 def _run_init():
