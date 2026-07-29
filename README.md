@@ -97,36 +97,42 @@ git clone https://github.com/Hao-Miracle/BizTrip-Agent.git
 cd BizTrip-Agent
 ```
 
-### 2. 安装依赖
+### 2. 安装
 
 ```bash
-# 规则模式（零 API Key，推荐先试用）
-pip install python-dotenv PyPDF2 openpyxl
+# 推荐：隔离安装命令行工具
+pipx install -e .
 
-# Agent 模式（LLM 增强，可选）
-pip install openai
+# 或者在当前 Python 环境中安装
+pip install -e .
 ```
 
-### 3. 配置邮箱
+### 3. 先跑 Demo（不需要邮箱）
 
 ```bash
-cp .env.example .env
+biztrip demo
+```
+
+这会用虚构差旅数据在 `output/` 目录生成一份示例 Excel，先确认工具链可用。
+
+### 4. 配置邮箱
+
+```bash
+biztrip init
 # 编辑 .env，填入邮箱和授权码
 ```
 
 > 详细配置指南见 [安装文档](docs/installation.md)
 
-### 4. 运行
+### 5. 扫描真实邮箱
 
 ```bash
-# 规则模式（零 API Key 也能用）
-python3 phase1/generate_report.py
-
-# Agent 模式（AI 增强，不配 Key 自动降级）
-python3 phase2/agent_report.py
+biztrip scan
 ```
 
 运行后按提示输入日期范围，直接回车扫描最近 60 封邮件。
+
+> 旧入口仍可用：`python3 phase1/generate_report.py` 或 `python3 phase2/agent_report.py`。
 
 ---
 

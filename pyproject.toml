@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "biztrip-agent"
+version = "0.1.2"
+description = "Personal business trip email scanner and reimbursement report generator."
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+authors = [
+    { name = "Hao-Miracle" }
+]
+dependencies = [
+    "python-dotenv>=1.0.0",
+    "PyPDF2>=3.0.0",
+    "openpyxl>=3.1.0",
+]
+
+[project.optional-dependencies]
+llm = [
+    "openai>=1.0.0",
+]
+
+[project.scripts]
+biztrip = "biztrip_agent.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["biztrip_agent*", "common*", "phase1*", "phase2*"]
