@@ -91,7 +91,7 @@ def save_attachments(msg, email_idx, attach_dir=ATTACH_DIR):
 # ========== 主流程 ==========
 
 
-def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, interactive=True):
+def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, interactive=True, review=False):
     output_dir = os.path.abspath(output_dir)
     attach_dir = os.path.join(output_dir, '附件')
     os.makedirs(attach_dir, exist_ok=True)
@@ -243,6 +243,10 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
     # ===== Step 5: 生成 Excel =====
     total_amount = sum(r.get('金额', 0) or 0 for r in records)
     xlsx_path = _generate_excel(records, trips, total_amount, scan_label, output_dir=output_dir, use_llm=use_llm)
+    review_path = None
+    if review:
+        from biztrip_agent.review import generate_review_html
+        review_path = generate_review_html(records, trips, output_dir, scan_label, excel_path=xlsx_path)
 
     # ===== 打印结果 =====
     print(f'\n{"=" * 60}')
@@ -260,6 +264,13 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
         for t in trips:
             print(f'  🏷️  Trip #{t["trip_id"]}  {t["summary"]}')
             print(f'     ¥{t["total"]:,.2f}  ({len(t["records"])} 条记录)')
+
+    return {
+        'records': records,
+        'trips': trips,
+        'xlsx_path': xlsx_path,
+        'review_path': str(review_path) if review_path else None,
+    }
 
 
 def _get_pdf_attachments_raw(msg):

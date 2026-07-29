@@ -28,6 +28,7 @@ def main(argv=None):
         default=str(OUTPUT_DIR),
         help="Directory for the generated demo report. Defaults to ./output.",
     )
+    demo_parser.add_argument("--review", action="store_true", help="Also generate a local HTML review page.")
 
     subparsers.add_parser("check", help="Check Python version, dependencies, and local config.")
     subparsers.add_parser("init", help="Create .env from .env.example if it does not exist.")
@@ -36,6 +37,7 @@ def main(argv=None):
     scan_parser.add_argument("--end", help="End date in YYYY-MM-DD format.")
     scan_parser.add_argument("--count", type=int, default=60, help="Number of recent emails to scan when no date range is set.")
     scan_parser.add_argument("--no-llm", action="store_true", help="Force rule mode even when LLM config is present.")
+    scan_parser.add_argument("--review", action="store_true", help="Also generate a local HTML review page.")
     scan_parser.add_argument(
         "--output-dir",
         default=str(OUTPUT_DIR),
@@ -46,7 +48,7 @@ def main(argv=None):
     command = args.command or "demo"
 
     if command == "demo":
-        return demo(Path(args.output_dir))
+        return demo(Path(args.output_dir), review=args.review)
     if command == "check":
         return check()
     if command == "init":
@@ -58,7 +60,7 @@ def main(argv=None):
     return 2
 
 
-def demo(output_dir):
+def demo(output_dir, review=False):
     """Generate a local Excel report from fictional records."""
     try:
         from openpyxl import Workbook
@@ -181,6 +183,17 @@ def demo(output_dir):
     print(f"Records: {len(records)}")
     print(f"Total: ¥{total:,.2f}")
     print(f"Excel: {report_path}")
+    if review:
+        from biztrip_agent.review import generate_review_html
+
+        review_path = generate_review_html(
+            records,
+            trips,
+            output_dir,
+            scan_label="示例数据",
+            excel_path=report_path,
+        )
+        print(f"Review: {review_path}")
     return 0
 
 
@@ -245,14 +258,17 @@ def scan(args):
         print(f"Unable to load scanner: {exc}")
         return 1
     interactive = not any([args.start, args.end, args.count != 60, args.no_llm, args.output_dir != str(OUTPUT_DIR)])
-    agent_main(
+    result = agent_main(
         start=args.start,
         end=args.end,
         count=args.count,
         no_llm=args.no_llm,
         output_dir=args.output_dir,
         interactive=interactive,
+        review=args.review,
     )
+    if result and result.get("review_path"):
+        print(f"Review: {result['review_path']}")
     return 0
 
 
