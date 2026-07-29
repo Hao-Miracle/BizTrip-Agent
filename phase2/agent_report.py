@@ -247,6 +247,8 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
     if review:
         from biztrip_agent.review import generate_review_html
         review_path = generate_review_html(records, trips, output_dir, scan_label, excel_path=xlsx_path)
+    from biztrip_agent.results import write_results_json
+    results_path = write_results_json(records, trips, output_dir, scan_label, xlsx_path=xlsx_path, review_path=review_path)
 
     # ===== 打印结果 =====
     print(f'\n{"=" * 60}')
@@ -257,6 +259,7 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
     print(f'  ✈️  识别到 {len(trips)} 次出差/旅行')
     print(f'  💰 总金额: ¥{total_amount:,.2f}')
     print(f'  📊 Excel: {xlsx_path}')
+    print(f'  🧾 JSON: {results_path}')
     print(f'  📎 附件: {attach_dir}/')
 
     if trips:
@@ -270,6 +273,7 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
         'trips': trips,
         'xlsx_path': xlsx_path,
         'review_path': str(review_path) if review_path else None,
+        'results_path': str(results_path),
     }
 
 
