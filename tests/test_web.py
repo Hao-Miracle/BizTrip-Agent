@@ -5,7 +5,7 @@ from threading import Thread
 from http.server import ThreadingHTTPServer
 
 from biztrip_agent.cli import main
-from biztrip_agent.web import BizTripWebHandler, _run_demo, readiness_status, render_home
+from biztrip_agent.web import BizTripWebHandler, _run_demo, _run_scan, _validate_scan_inputs, readiness_status, render_home
 
 
 def test_web_home_contains_local_workflows():
@@ -14,6 +14,7 @@ def test_web_home_contains_local_workflows():
     assert "BizTrip Agent" in html
     assert 'action="/demo"' in html
     assert 'action="/rebuild"' in html
+    assert 'action="/scan"' in html
     assert 'action="/init"' in html
     assert "本地就绪检查" in html
     assert "records_YYYYMMDD.json" in html
@@ -30,6 +31,47 @@ def test_web_demo_form_generates_files(tmp_path):
     assert "Demo 已生成" in html
     assert (tmp_path / f"差旅汇总_demo_{today}.xlsx").exists()
     assert (tmp_path / f"review_{today}.html").exists()
+
+
+def test_scan_form_validates_inputs():
+    assert _validate_scan_inputs("2026-07-01", "2026-07-29", "60") is None
+    assert _validate_scan_inputs("2026/07/01", None, "60") == "开始日期必须使用 YYYY-MM-DD 格式。"
+    assert _validate_scan_inputs(None, "2026-07-99", "60") == "结束日期必须使用 YYYY-MM-DD 格式。"
+    assert _validate_scan_inputs(None, None, "abc") == "扫描邮件数量必须是整数。"
+    assert _validate_scan_inputs(None, None, "0") == "扫描邮件数量必须大于 0。"
+
+
+def test_web_scan_form_passes_safe_args(monkeypatch, tmp_path):
+    captured = {}
+
+    def fake_scan(args):
+        captured["args"] = args
+        tmp_path.joinpath("records_20260729.json").write_text("{}", encoding="utf-8")
+        return 0
+
+    monkeypatch.setattr("biztrip_agent.cli.scan", fake_scan)
+
+    html = _run_scan(
+        {
+            "start": "2026-07-01",
+            "end": "2026-07-29",
+            "count": "25",
+            "output_dir": str(tmp_path),
+            "review": "on",
+            "no_llm": "on",
+        }
+    )
+
+    args = captured["args"]
+    assert "扫描完成" in html
+    assert args.start == "2026-07-01"
+    assert args.end == "2026-07-29"
+    assert args.count == 25
+    assert args.output_dir == str(tmp_path)
+    assert args.review is True
+    assert args.no_llm is True
+    assert "EMAIL_PASSWORD" not in html
+    assert "LLM_API_KEY" not in html
 
 
 def test_readiness_status_does_not_expose_secret_values(tmp_path):

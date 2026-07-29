@@ -12,7 +12,7 @@
 biztrip web
 ```
 
-`web` 会启动只绑定本机的页面，用表单生成 Demo 或从已有 `records_YYYYMMDD.json` 重新生成报表。它不会读取邮箱，也不会修改邮箱配置。
+`web` 会启动只绑定本机的页面，用表单扫描邮箱、生成 Demo，或从已有 `records_YYYYMMDD.json` 重新生成报表。它不会展示邮箱授权码，也不会修改邮箱配置。
 
 页面顶部会显示本地就绪检查：
 - Python 版本
@@ -28,6 +28,13 @@ biztrip web
 ```bash
 biztrip web --no-open
 ```
+
+Web 扫描表单支持：
+- 开始日期 / 结束日期
+- 扫描邮件数量
+- 输出目录
+- 是否生成审阅页面
+- 是否强制规则模式
 
 ### 引导模式
 
