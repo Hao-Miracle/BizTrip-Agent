@@ -58,7 +58,7 @@ ATTACH_DIR = os.path.join(OUTPUT_DIR, '附件')
 os.makedirs(ATTACH_DIR, exist_ok=True)
 
 
-def save_attachments(msg, email_idx):
+def save_attachments(msg, email_idx, attach_dir=ATTACH_DIR):
     """保存附件"""
     KEEP_EXTS = ('.pdf', '.zip', '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.heic')
     IMG_BLOCK = ('advertising', 'downloadbutton', 'header', 'footer', 'logo', 'banner',
@@ -81,7 +81,7 @@ def save_attachments(msg, email_idx):
             raw = part.get_payload(decode=True)
             if raw:
                 safe_name = f'{email_idx}_{fn}'
-                path = os.path.join(ATTACH_DIR, safe_name)
+                path = os.path.join(attach_dir, safe_name)
                 with open(path, 'wb') as f:
                     f.write(raw)
                 saved.append(safe_name)
@@ -91,7 +91,11 @@ def save_attachments(msg, email_idx):
 # ========== 主流程 ==========
 
 
-def main():
+def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, interactive=True):
+    output_dir = os.path.abspath(output_dir)
+    attach_dir = os.path.join(output_dir, '附件')
+    os.makedirs(attach_dir, exist_ok=True)
+
     email_addr, auth_code, imap_server, imap_port = get_email_config()
 
     if not email_addr or not auth_code:
@@ -100,7 +104,7 @@ def main():
         print('   EMAIL_PASSWORD=your_authorization_code')
         return
 
-    use_llm = llm_available()
+    use_llm = llm_available() and not no_llm
     print('=' * 60)
     print('  BizTrip Agent')
     print(f'  模式: {"🧠 AI 增强模式" if use_llm else "📋 规则模式（零 API Key）"}')
@@ -121,9 +125,13 @@ def main():
         return
 
     # ===== Step 2: 日期过滤 + 获取邮件 =====
-    print('\n📅 是否指定日期范围？（直接回车使用最近60封）')
-    start = input('  开始日期 (YYYY-MM-DD): ').strip()
-    end = input('  结束日期 (YYYY-MM-DD): ').strip()
+    if interactive and start is None and end is None:
+        print(f'\n📅 是否指定日期范围？（直接回车使用最近{count}封）')
+        start = input('  开始日期 (YYYY-MM-DD): ').strip()
+        end = input('  结束日期 (YYYY-MM-DD): ').strip()
+    else:
+        start = start or ''
+        end = end or ''
 
     if start or end:
         parts = []
@@ -146,7 +154,7 @@ def main():
         scan_label = '~'.join(display) if display else '全部'
     else:
         search_cmd = 'ALL'
-        scan_label = '最近60封'
+        scan_label = f'最近{count}封'
 
     status, data = conn.search(None, search_cmd)
     if status != 'OK' or not data[0]:
@@ -156,7 +164,7 @@ def main():
 
     mail_ids = data[0].split()
     if not start and not end:
-        mail_ids = mail_ids[-60:]
+        mail_ids = mail_ids[-count:]
 
     print(f'\n📬 扫描范围: {scan_label} ({len(mail_ids)} 封邮件)')
 
@@ -174,10 +182,10 @@ def main():
         sender = decode_str(msg['From'])
         subject = decode_str(msg['Subject'])
         body = get_email_text(msg)
-        attachments = save_attachments(msg, idx)
+        attachments = save_attachments(msg, idx, attach_dir=attach_dir)
 
         # 分类（LLM 或规则）
-        classify_result = classify_email(subject, sender, body[:500])
+        classify_result = classify_email(subject, sender, body[:500], use_llm=use_llm)
 
         category = classify_result.get('category', '不相关')
         method = classify_result.get('method', '规则')
@@ -185,7 +193,7 @@ def main():
             continue
 
         # 提取（LLM 或规则）
-        extract_result = extract_record(body, subject, category)
+        extract_result = extract_record(body, subject, category, use_llm=use_llm)
 
         # 机票按 PDF 拆分
         if category == '机票':
@@ -230,11 +238,11 @@ def main():
         return
 
     # ===== Step 4: 出差聚合 =====
-    trips = aggregate_trips(records)
+    trips = aggregate_trips(records, use_llm=use_llm)
 
     # ===== Step 5: 生成 Excel =====
     total_amount = sum(r.get('金额', 0) or 0 for r in records)
-    _generate_excel(records, trips, total_amount, scan_label)
+    xlsx_path = _generate_excel(records, trips, total_amount, scan_label, output_dir=output_dir, use_llm=use_llm)
 
     # ===== 打印结果 =====
     print(f'\n{"=" * 60}')
@@ -244,9 +252,8 @@ def main():
         print(f'  🧠 LLM 提取: {llm_count} 条  📋 规则降级: {rule_count} 条')
     print(f'  ✈️  识别到 {len(trips)} 次出差/旅行')
     print(f'  💰 总金额: ¥{total_amount:,.2f}')
-    report_name = f"差旅汇总_{datetime.now().strftime('%Y%m%d')}.xlsx"
-    print(f'  📊 Excel: {os.path.join(OUTPUT_DIR, report_name)}')
-    print(f'  📎 附件: {ATTACH_DIR}/')
+    print(f'  📊 Excel: {xlsx_path}')
+    print(f'  📎 附件: {attach_dir}/')
 
     if trips:
         print(f'\n📋 出差行程汇总:')
@@ -292,7 +299,7 @@ def _parse_pdf_filename(fn):
     return info
 
 
-def _generate_excel(records, trips, total_amount, scan_label):
+def _generate_excel(records, trips, total_amount, scan_label, output_dir=OUTPUT_DIR, use_llm=None):
     """生成 Excel 报表"""
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -325,7 +332,9 @@ def _generate_excel(records, trips, total_amount, scan_label):
         '火车票': PatternFill(start_color='E0E7FF', end_color='E0E7FF', fill_type='solid'),
     }
 
-    mode = 'AI增强模式' if llm_available() else '规则模式'
+    if use_llm is None:
+        use_llm = llm_available()
+    mode = 'AI增强模式' if use_llm else '规则模式'
     total = sum(r.get('金额', 0) or 0 for r in records)
 
     # ===== Sheet 1: 报销总览 =====
@@ -510,8 +519,10 @@ def _generate_excel(records, trips, total_amount, scan_label):
             cell.fill = rf
 
     today = datetime.now().strftime('%Y%m%d')
-    xlsx_path = os.path.join(OUTPUT_DIR, f'差旅汇总_{today}.xlsx')
+    os.makedirs(output_dir, exist_ok=True)
+    xlsx_path = os.path.join(output_dir, f'差旅汇总_{today}.xlsx')
     wb.save(xlsx_path)
+    return xlsx_path
 
 
 if __name__ == '__main__':

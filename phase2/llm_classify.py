@@ -147,7 +147,7 @@ def rule_classify(sender, subject):
 CONFIDENCE_THRESHOLD = 0.7
 
 
-def classify_email(subject, sender, body_preview):
+def classify_email(subject, sender, body_preview, use_llm=True):
     """
     分类单封邮件。
 
@@ -157,7 +157,7 @@ def classify_email(subject, sender, body_preview):
     3. 返回统一格式
     """
     # 先走 LLM
-    llm_result = llm_classify(subject, sender, body_preview)
+    llm_result = llm_classify(subject, sender, body_preview) if use_llm else None
 
     if llm_result and llm_result['confidence'] >= CONFIDENCE_THRESHOLD:
         return llm_result
