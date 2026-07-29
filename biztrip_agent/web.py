@@ -2,7 +2,9 @@
 
 import argparse
 import html
-import json
+import importlib.util
+import shutil
+import sys
 import threading
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -54,6 +56,9 @@ class BizTripWebHandler(BaseHTTPRequestHandler):
         if self.path == "/rebuild":
             self._send_html(_run_rebuild(form))
             return
+        if self.path == "/init":
+            self._send_html(_run_init())
+            return
         self.send_error(404)
 
     def log_message(self, format, *args):
@@ -79,6 +84,7 @@ def render_home(message=None, error=None, files=None):
     if error:
         message_html = f'<div class="notice bad">{html.escape(error)}</div>'
     files_html = _files_html(files or [])
+    readiness_html = _readiness_html(readiness_status())
     return f"""<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -161,6 +167,34 @@ def render_home(message=None, error=None, files=None):
     }}
     .files ul {{ margin: 8px 0 0; padding-left: 20px; }}
     .files li {{ margin: 4px 0; overflow-wrap: anywhere; }}
+    .readiness {{
+      grid-column: 1 / -1;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      padding: 16px 18px;
+    }}
+    .status-grid {{
+      display: grid;
+      grid-template-columns: repeat(2, minmax(220px, 1fr));
+      gap: 10px;
+      margin-top: 12px;
+    }}
+    .status {{
+      border: 1px solid var(--line);
+      padding: 10px 12px;
+      min-height: 66px;
+      background: #fff;
+    }}
+    .status strong {{ display: block; font-size: 14px; }}
+    .status span {{ display: block; margin-top: 4px; color: var(--muted); font-size: 13px; }}
+    .status.ok {{ border-color: #a8dab5; }}
+    .status.warn {{ border-color: #fdd663; }}
+    .status.bad {{ border-color: #f4b6b1; }}
+    .secondary {{
+      border-color: var(--line);
+      background: #fff;
+      color: var(--text);
+    }}
     @media (max-width: 760px) {{
       header, main {{ padding-left: 16px; padding-right: 16px; }}
       main {{ grid-template-columns: 1fr; }}
@@ -175,6 +209,7 @@ def render_home(message=None, error=None, files=None):
   <main>
     {message_html}
     {files_html}
+    {readiness_html}
     <section>
       <h2>生成 Demo</h2>
       <form method="post" action="/demo">
@@ -199,6 +234,77 @@ def render_home(message=None, error=None, files=None):
 </body>
 </html>
 """
+
+
+def readiness_status(project_dir=None):
+    """Return local readiness flags without exposing secret values."""
+    project_dir = Path(project_dir) if project_dir else Path(__file__).resolve().parents[1]
+    env_path = project_dir / ".env"
+    env_values = _read_env_flags(env_path)
+    return [
+        {
+            "label": "Python",
+            "state": "ok" if sys.version_info >= (3, 8) else "bad",
+            "detail": f"{sys.version.split()[0]}，需要 3.8+",
+        },
+        *_dependency_status(),
+        {
+            "label": ".env 文件",
+            "state": "ok" if env_path.exists() else "warn",
+            "detail": "已创建" if env_path.exists() else "未创建，可先生成模板",
+        },
+        {
+            "label": "邮箱账号",
+            "state": "ok" if env_values.get("EMAIL_ACCOUNT") else "warn",
+            "detail": "已填写" if env_values.get("EMAIL_ACCOUNT") else "未填写",
+        },
+        {
+            "label": "邮箱授权码",
+            "state": "ok" if env_values.get("EMAIL_PASSWORD") else "warn",
+            "detail": "已填写" if env_values.get("EMAIL_PASSWORD") else "未填写",
+        },
+        {
+            "label": "LLM 增强",
+            "state": "ok" if env_values.get("LLM_API_KEY") else "warn",
+            "detail": "已启用" if env_values.get("LLM_API_KEY") else "未启用，将使用规则模式",
+        },
+    ]
+
+
+def _dependency_status():
+    packages = [
+        ("python-dotenv", "dotenv", True),
+        ("PyPDF2", "PyPDF2", True),
+        ("openpyxl", "openpyxl", True),
+        ("openai", "openai", False),
+    ]
+    rows = []
+    for package_name, module_name, required in packages:
+        available = importlib.util.find_spec(module_name) is not None
+        if available:
+            state = "ok"
+            detail = "已安装"
+        elif required:
+            state = "bad"
+            detail = "缺失，运行 pip install -e ."
+        else:
+            state = "warn"
+            detail = "未安装，可选"
+        rows.append({"label": package_name, "state": state, "detail": detail})
+    return rows
+
+
+def _read_env_flags(env_path):
+    if not env_path.exists():
+        return {}
+    flags = {}
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        flags[key.strip()] = bool(value.strip().strip("\"'"))
+    return flags
 
 
 def _run_demo(form):
@@ -227,6 +333,18 @@ def _run_rebuild(form):
     return render_home(message="报表已重建。", files=_latest_files(target_dir))
 
 
+def _run_init():
+    project_dir = Path(__file__).resolve().parents[1]
+    env_path = project_dir / ".env"
+    example_path = project_dir / ".env.example"
+    if env_path.exists():
+        return render_home(message=".env 已存在，不会覆盖现有配置。")
+    if not example_path.exists():
+        return render_home(error="未找到 .env.example，无法生成模板。")
+    shutil.copyfile(example_path, env_path)
+    return render_home(message=".env 模板已创建。请在本地编辑邮箱账号和授权码。")
+
+
 def _latest_files(output_dir):
     output_dir = Path(output_dir)
     if not output_dir.exists():
@@ -243,3 +361,24 @@ def _files_html(files):
         return ""
     rows = "".join(f"<li>{html.escape(str(path))}</li>" for path in files)
     return f'<section class="files"><h2>生成文件</h2><ul>{rows}</ul></section>'
+
+
+def _readiness_html(statuses):
+    rows = []
+    for item in statuses:
+        rows.append(
+            f'<div class="status {html.escape(item["state"])}">'
+            f'<strong>{html.escape(item["label"])}</strong>'
+            f'<span>{html.escape(item["detail"])}</span>'
+            "</div>"
+        )
+    return (
+        '<section class="readiness">'
+        "<h2>本地就绪检查</h2>"
+        '<div class="sub">只显示是否已配置，不显示邮箱授权码或 API Key。</div>'
+        f'<div class="status-grid">{"".join(rows)}</div>'
+        '<form method="post" action="/init">'
+        '<button class="secondary" type="submit">生成 .env 模板</button>'
+        "</form>"
+        "</section>"
+    )
