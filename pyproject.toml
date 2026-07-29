@@ -22,9 +22,15 @@ dependencies = [
 llm = [
     "openai>=1.0.0",
 ]
+test = [
+    "pytest>=8.0.0",
+]
 
 [project.scripts]
 biztrip = "biztrip_agent.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["biztrip_agent*", "common*", "phase1*", "phase2*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
