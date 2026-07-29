@@ -55,6 +55,14 @@ def test_extracts_invoice_amount_and_date_without_llm():
     assert result["日期"] == "2026年7月11日"
 
 
+def test_extracts_12306_amount_from_garbled_pdf_text_without_llm():
+    body = "12306 SÑyhS÷x\x01 :26519146126000331196\nXichangxiD252\n2026^t07g\x0815eå\nyhN÷:ÿå149.00N\x8c{I"
+
+    result = extract_record(body, "网上购票系统-电子发票通知", "发票", use_llm=False)
+
+    assert result["金额"] == 149.0
+
+
 def test_rule_aggregate_groups_by_destination_without_llm():
     records = [
         {"分类": "机票", "日期": "2026-07-10", "出发地": "上海", "目的地": "深圳", "金额": 1280.0},

@@ -115,7 +115,7 @@ pip install -e .
 biztrip web
 ```
 
-它会打开本地页面。账号只配置一次；每次扫描时选择最近邮件数量或日期范围，系统会自动选择 IMAP 服务器。也可以生成 Demo，或从 `records_YYYYMMDD.json` 重新生成报表。
+它会打开本地页面。账号只配置一次；每次扫描时选择最近邮件数量或日期范围，系统会自动选择 IMAP 服务器。也可以生成 Demo，或从 `records_YYYYMMDD_HHMMSS.json` 重新生成报表。
 页面也会显示 Python、依赖和 `.env` 配置状态，但不会展示邮箱授权码或 API Key。
 真实扫描会在后台运行，页面会显示任务状态、错误原因和生成文件。
 
@@ -184,8 +184,8 @@ pytest
 
 ```
 output/
-├── 差旅汇总_20260705.xlsx    ← 三 Sheet Excel 报表
-├── records_20260705.json      ← 结构化扫描结果（用于复查/再生成）
+├── 差旅汇总_20260705_143022.xlsx    ← 三 Sheet Excel 报表
+├── records_20260705_143022.json      ← 结构化扫描结果（用于复查/再生成）
 └── 附件/                        ← 原始 PDF/ZIP 原件
     ├── 机票/
     ├── 火车票/
@@ -202,12 +202,12 @@ output/
 | **费用明细** | 所有记录按日期排序，最高金额红色高亮，标注提取方法 |
 | **按供应商** | 各平台消费排名，隔行配色 |
 
-`records_YYYYMMDD.json` 会保留结构化记录、行程分组和生成文件路径，方便后续复查或重新生成报表。
+`records_YYYYMMDD_HHMMSS.json` 会保留结构化记录、行程分组和生成文件路径，方便后续复查或重新生成报表。文件名带生成时间，同一天重复扫描不会覆盖旧结果。
 
 从 JSON 重新生成报表：
 
 ```bash
-biztrip rebuild output/records_20260705.json --review
+biztrip rebuild output/records_20260705_143022.json --review
 ```
 
 ---

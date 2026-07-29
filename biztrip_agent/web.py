@@ -321,8 +321,8 @@ def render_home(message=None, error=None, files=None, result_summary=None):
     <section>
       <h2>从 JSON 重建</h2>
       <form method="post" action="/rebuild">
-        <label for="json-path">records_YYYYMMDD.json 路径</label>
-        <input id="json-path" name="json_path" type="text" placeholder="output/records_20260729.json">
+        <label for="json-path">records_YYYYMMDD_HHMMSS.json 路径</label>
+        <input id="json-path" name="json_path" type="text" placeholder="output/records_20260729_143022.json">
         <label for="rebuild-output">输出目录</label>
         <input id="rebuild-output" name="output_dir" type="text" placeholder="留空则输出到 JSON 所在目录">
         <label class="check"><input name="review" type="checkbox" checked> 同时生成审阅页面</label>
@@ -506,7 +506,7 @@ def _run_rebuild(form):
 
     json_path = form.get("json_path", "").strip()
     if not json_path:
-        return render_home(error="请选择 records_YYYYMMDD.json 文件路径。")
+        return render_home(error="请选择 records_YYYYMMDD_HHMMSS.json 文件路径。")
     output_dir = form.get("output_dir", "").strip()
     args = argparse.Namespace(json_path=json_path, output_dir=output_dir or None, review=form.get("review") == "on")
     exit_code = rebuild(args)

@@ -1,4 +1,3 @@
-from datetime import datetime
 from http.client import HTTPConnection
 from threading import Thread
 import time
@@ -41,7 +40,7 @@ def test_web_home_contains_local_workflows():
     assert "按日期扫描" in html
     assert "高级配置" in html
     assert "本地就绪检查" in html
-    assert "records_YYYYMMDD.json" in html
+    assert "records_YYYYMMDD_HHMMSS.json" in html
 
 
 def test_web_rejects_invalid_port():
@@ -51,10 +50,9 @@ def test_web_rejects_invalid_port():
 def test_web_demo_form_generates_files(tmp_path):
     html = _run_demo({"output_dir": str(tmp_path), "review": "on"})
 
-    today = datetime.now().strftime("%Y%m%d")
     assert "Demo 已生成" in html
-    assert (tmp_path / f"差旅汇总_demo_{today}.xlsx").exists()
-    assert (tmp_path / f"review_{today}.html").exists()
+    assert next(tmp_path.glob("差旅汇总_demo_*.xlsx")).exists()
+    assert next(tmp_path.glob("review_*.html")).exists()
 
 
 def test_scan_form_validates_inputs():

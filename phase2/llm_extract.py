@@ -255,6 +255,10 @@ def rule_extract(body, subject, category):
         if m:
             data['金额'] = float(m.group(1))
             break
+    if data['金额'] == '':
+        amount = _fallback_12306_amount(body, subject)
+        if amount:
+            data['金额'] = amount
 
     # 日期
     for p in [r'(\d{4}年\d{1,2}月\d{1,2}日)', r'(\d{4}[-/年]\d{1,2}[-/月]\d{1,2})']:
@@ -275,6 +279,22 @@ def rule_extract(body, subject, category):
         data['订单号'] = m.group(1)
 
     return data
+
+
+def _fallback_12306_amount(body, subject):
+    """Extract ticket amount from 12306 PDFs with garbled currency text."""
+    context = f'{subject}\n{body}'.lower()
+    if '12306' not in context and 'rails.com.cn' not in context and '网上购票系统' not in context:
+        return ''
+    amounts = []
+    for raw in re.findall(r'(?<!\d)(\d{1,4}\.\d{2})(?!\d)', body):
+        try:
+            value = float(raw)
+        except ValueError:
+            continue
+        if 1 <= value <= 5000:
+            amounts.append(value)
+    return max(amounts) if amounts else ''
 
 
 # ====== 主入口 ======

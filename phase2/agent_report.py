@@ -40,6 +40,7 @@ load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from common.utils import decode_str, get_email_config
 from common.email_parser import get_email_text
+from biztrip_agent.results import unique_output_path
 
 # Phase 2 LLM 模块。兼容脚本运行和安装后包导入。
 try:
@@ -126,6 +127,66 @@ def infer_vendor(record):
 
     sender_name = str(record.get('发件人', '') or '').split('<', 1)[0].strip().strip('"')
     return sender_name or '其他'
+
+
+def enrich_records_from_attachments(records, output_dir=OUTPUT_DIR):
+    """Backfill fields that can be recovered from archived attachments."""
+    attach_dir = os.path.join(str(output_dir), '附件')
+    for record in records:
+        if record.get('金额', '') not in ('', None):
+            continue
+        if infer_vendor(record) != '12306':
+            continue
+        text = _attachment_text(record.get('附件', ''), attach_dir)
+        amount = _fallback_12306_amount(text)
+        if amount:
+            record['金额'] = amount
+    return records
+
+
+def _attachment_text(attachment_value, attach_dir):
+    texts = []
+    for name in str(attachment_value or '').split(';'):
+        name = name.strip()
+        if not name:
+            continue
+        path = os.path.join(attach_dir, name)
+        if not os.path.exists(path):
+            continue
+        if name.lower().endswith('.pdf'):
+            with open(path, 'rb') as f:
+                texts.append(_pdf_text_from_bytes(f.read()))
+        elif name.lower().endswith('.zip'):
+            try:
+                import zipfile
+                with zipfile.ZipFile(path) as zf:
+                    for info in zf.infolist():
+                        if info.filename.lower().endswith('.pdf'):
+                            texts.append(_pdf_text_from_bytes(zf.read(info.filename)))
+            except Exception:
+                continue
+    return '\n'.join(texts)
+
+
+def _pdf_text_from_bytes(data):
+    try:
+        from PyPDF2 import PdfReader
+        reader = PdfReader(BytesIO(data))
+        return '\n'.join(page.extract_text() or '' for page in reader.pages)
+    except Exception:
+        return ''
+
+
+def _fallback_12306_amount(text):
+    amounts = []
+    for raw in re.findall(r'(?<!\d)(\d{1,4}\.\d{2})(?!\d)', text or ''):
+        try:
+            value = float(raw)
+        except ValueError:
+            continue
+        if 1 <= value <= 5000:
+            amounts.append(value)
+    return max(amounts) if amounts else ''
 
 
 def enrich_record(record, subject, sender, attachments):
@@ -285,6 +346,8 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
     if not records:
         print('\n未发现出差相关邮件')
         return
+
+    enrich_records_from_attachments(records, output_dir=output_dir)
 
     # ===== Step 4: 出差聚合 =====
     trips = aggregate_trips(records, use_llm=use_llm)
@@ -582,11 +645,10 @@ def _generate_excel(records, trips, total_amount, scan_label, output_dir=OUTPUT_
             cell.border = thin_border
             cell.fill = rf
 
-    today = datetime.now().strftime('%Y%m%d')
     os.makedirs(output_dir, exist_ok=True)
-    xlsx_path = os.path.join(output_dir, f'差旅汇总_{today}.xlsx')
+    xlsx_path = unique_output_path(output_dir, '差旅汇总', '.xlsx')
     wb.save(xlsx_path)
-    return xlsx_path
+    return str(xlsx_path)
 
 
 if __name__ == '__main__':
