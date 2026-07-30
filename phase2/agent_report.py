@@ -35,7 +35,7 @@ from io import BytesIO
 
 from dotenv import load_dotenv
 
-load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
+load_dotenv(os.getenv('BIZTRIP_ENV_PATH') or os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from common.utils import decode_str, get_email_config
@@ -214,9 +214,7 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
     email_addr, auth_code, imap_server, imap_port = get_email_config()
 
     if not email_addr or not auth_code:
-        print('❌ 请在 .env 中配置邮箱信息')
-        print('   EMAIL_ACCOUNT=your_email@example.com')
-        print('   EMAIL_PASSWORD=your_authorization_code')
+        print('❌ 请先在 Web 页面保存邮箱账号和邮箱授权码')
         return
 
     use_llm = llm_available() and not no_llm

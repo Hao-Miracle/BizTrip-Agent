@@ -25,6 +25,12 @@ biztrip web
 
 保存后普通使用不需要再配置邮箱。
 
+测试首次使用流程时，可以用临时配置启动，不影响真实 `.env`：
+
+```bash
+BIZTRIP_ENV_PATH=/tmp/biztrip-first-run.env biztrip web --port 8766
+```
+
 如果不想自动打开浏览器：
 
 ```bash

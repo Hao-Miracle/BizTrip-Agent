@@ -9,6 +9,7 @@ from biztrip_agent.web import (
     BizTripWebHandler,
     _friendly_error,
     _infer_imap_server,
+    _env_path,
     _job_snapshot,
     _onboarding_html,
     _provider_setup_hint,
@@ -47,6 +48,14 @@ def test_web_home_contains_local_workflows():
     assert "准备状态" in html
     assert "诊断信息" in html
     assert "records_YYYYMMDD_HHMMSS.json" in html
+
+
+def test_web_env_path_can_use_temporary_first_run_config(monkeypatch, tmp_path):
+    env_path = tmp_path / "first-run.env"
+    monkeypatch.setenv("BIZTRIP_ENV_PATH", str(env_path))
+
+    assert _env_path() == env_path
+    assert "第一次使用" in render_home()
 
 
 def test_first_run_onboarding_guides_account_setup():

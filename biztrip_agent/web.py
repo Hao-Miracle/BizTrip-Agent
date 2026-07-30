@@ -4,6 +4,7 @@ import argparse
 import html
 import importlib.util
 import json
+import os
 import shutil
 import sys
 import threading
@@ -430,6 +431,9 @@ def _dependency_status():
 
 
 def _env_path():
+    override = os.getenv("BIZTRIP_ENV_PATH", "").strip()
+    if override:
+        return Path(override).expanduser()
     return Path(__file__).resolve().parents[1] / ".env"
 
 
