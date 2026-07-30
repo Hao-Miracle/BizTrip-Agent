@@ -7,6 +7,7 @@ from http.server import ThreadingHTTPServer
 from biztrip_agent.cli import main
 from biztrip_agent.web import (
     BizTripWebHandler,
+    _default_scan_range,
     _friendly_error,
     _infer_imap_server,
     _job_snapshot,
@@ -42,6 +43,17 @@ def test_web_home_contains_local_workflows():
     assert "高级配置" in html
     assert "本地就绪检查" in html
     assert "records_YYYYMMDD_HHMMSS.json" in html
+
+
+def test_default_scan_range_uses_current_year_to_today():
+    class FakeDate:
+        year = 2026
+
+        @staticmethod
+        def isoformat():
+            return "2026-07-30"
+
+    assert _default_scan_range(FakeDate()) == ("2026-01-01", "2026-07-30")
 
 
 def test_web_rejects_invalid_port():
@@ -101,6 +113,39 @@ def test_web_scan_form_passes_safe_args(monkeypatch, tmp_path):
     assert args.no_llm is True
     assert "EMAIL_PASSWORD" not in str(snapshot)
     assert "LLM_API_KEY" not in str(snapshot)
+
+
+def test_web_auto_scan_uses_default_date_range(monkeypatch, tmp_path):
+    captured = {}
+
+    def fake_scan(args):
+        captured["args"] = args
+        tmp_path.joinpath("records_20260730_120000.json").write_text("{}", encoding="utf-8")
+        return 0
+
+    monkeypatch.setattr("biztrip_agent.cli.scan", fake_scan)
+    monkeypatch.setattr("biztrip_agent.web._preflight_scan", lambda _output_dir: None)
+    monkeypatch.setattr("biztrip_agent.web._default_scan_range", lambda: ("2026-01-01", "2026-07-30"))
+
+    payload = _run_scan(
+        {
+            "auto_scan": "on",
+            "count": "60",
+            "output_dir": str(tmp_path),
+            "review": "on",
+        }
+    )
+    deadline = time.time() + 2
+    snapshot = _job_snapshot(payload["job_id"])
+    while snapshot["status"] in {"queued", "running"} and time.time() < deadline:
+        time.sleep(0.02)
+        snapshot = _job_snapshot(payload["job_id"])
+
+    args = captured["args"]
+    assert snapshot["status"] == "succeeded"
+    assert args.start == "2026-01-01"
+    assert args.end == "2026-07-30"
+    assert args.count == 60
 
 
 def test_account_form_saves_config_and_infers_imap(monkeypatch, tmp_path):

@@ -30,7 +30,7 @@ import os
 import sys
 import re
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from io import BytesIO
 
 from dotenv import load_dotenv
@@ -261,7 +261,7 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
         if end:
             try:
                 dt = datetime.strptime(end, '%Y-%m-%d')
-                parts.append(f'BEFORE {dt.strftime("%d-%b-%Y")}')
+                parts.append(f'BEFORE {(dt + timedelta(days=1)).strftime("%d-%b-%Y")}')
                 display.append(end)
             except ValueError:
                 print('  ⚠️ 结束日期格式错误，已忽略')

@@ -11,6 +11,7 @@ import time
 import traceback
 import uuid
 import webbrowser
+from datetime import date
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -506,8 +507,11 @@ def _run_rebuild(form):
 def _run_scan(form):
     from biztrip_agent.cli import OUTPUT_DIR
 
-    start = form.get("start", "").strip() or None
-    end = form.get("end", "").strip() or None
+    if form.get("auto_scan") == "on":
+        start, end = _default_scan_range()
+    else:
+        start = form.get("start", "").strip() or None
+        end = form.get("end", "").strip() or None
     count_value = form.get("count", "").strip() or "60"
     output_dir = form.get("output_dir", "").strip() or str(OUTPUT_DIR)
     error = _validate_scan_inputs(start, end, count_value)
@@ -667,6 +671,11 @@ def _infer_imap_server(email_account):
     if "@outlook.com" in lowered or "@hotmail.com" in lowered:
         return "outlook.office365.com"
     return ""
+
+
+def _default_scan_range(today=None):
+    today = today or date.today()
+    return f"{today.year}-01-01", today.isoformat()
 
 
 def _friendly_error(exc):
@@ -882,20 +891,12 @@ def _account_form(values, submit_label):
 
 def _scan_html(configured):
     disabled = "" if configured else " disabled"
-    hint = "选择这次要报销的日期范围。留空时默认扫描最近 60 封邮件。" if configured else "请先保存邮箱账号和授权码。"
+    start, end = _default_scan_range()
+    hint = f"默认扫描 {start} 到 {end} 的邮件，生成 Excel 和审阅页。" if configured else "请先保存邮箱账号和授权码。"
     return f"""
       <div class="sub">{hint}</div>
       <form method="post" action="/scan" data-background="true">
-        <div class="config-grid">
-          <div>
-            <label for="scan-start">开始日期</label>
-            <input id="scan-start" name="start" type="text" placeholder="YYYY-MM-DD，可留空"{disabled}>
-          </div>
-          <div>
-            <label for="scan-end">结束日期</label>
-            <input id="scan-end" name="end" type="text" placeholder="YYYY-MM-DD，可留空"{disabled}>
-          </div>
-        </div>
+        <input name="auto_scan" type="hidden" value="on">
         <input name="count" type="hidden" value="60">
         <input name="output_dir" type="hidden" value="output">
         <input name="review" type="hidden" value="on">
