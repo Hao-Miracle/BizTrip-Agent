@@ -1027,7 +1027,7 @@ def _scan_html(configured):
 
 def _llm_config_html(values):
     llm_enabled = bool(values.get("LLM_API_KEY"))
-    llm_status = "已启用。点击开始生成时自动调用；没有单独对话窗口，失败时自动回到规则模式。" if llm_enabled else "可选。不配置也能使用规则模式。"
+    llm_status = "已启用。点击开始生成时自动调用；没有单独对话窗口，失败时自动回到规则模式。" if llm_enabled else "可选。不配置也能使用规则模式；配置后点击开始生成时自动调用，没有单独对话窗口。"
     return f"""
       <details>
         <summary>LLM 增强配置</summary>

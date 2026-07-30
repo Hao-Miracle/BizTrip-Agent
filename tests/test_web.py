@@ -29,7 +29,8 @@ from biztrip_agent.web import (
 )
 
 
-def test_web_home_contains_local_workflows():
+def test_web_home_contains_local_workflows(monkeypatch, tmp_path):
+    monkeypatch.setenv("BIZTRIP_ENV_PATH", str(tmp_path / "test.env"))
     html = render_home()
 
     assert "BizTrip Agent" in html
