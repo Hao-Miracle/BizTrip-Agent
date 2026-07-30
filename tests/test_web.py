@@ -70,6 +70,11 @@ def test_first_run_onboarding_guides_account_setup():
     assert "开启 IMAP/SMTP 服务" in html
     assert "生成邮箱授权码" in html
     assert "不要使用登录密码" in html
+    assert "不同邮箱怎么拿授权码" in html
+    assert "QQ 邮箱" in html
+    assert "163/126 邮箱" in html
+    assert "Gmail" in html
+    assert "Outlook/Hotmail" in html
 
 
 def test_first_run_onboarding_hides_after_configured():

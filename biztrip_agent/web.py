@@ -888,6 +888,15 @@ def _onboarding_html(values, configured):
         return ""
     email = values.get("EMAIL_ACCOUNT", "")
     provider_hint = _provider_setup_hint(email)
+    provider_rows = "".join(
+        f"<li>{html.escape(text)}</li>"
+        for text in [
+            "QQ 邮箱：设置 -> 账号 -> POP3/IMAP/SMTP/Exchange/CardDAV/CalDAV 服务 -> 开启 IMAP/SMTP -> 生成授权码。",
+            "163/126 邮箱：设置 -> POP3/SMTP/IMAP -> 开启 IMAP 服务 -> 生成授权码。",
+            "Gmail：先开启两步验证，再到账户安全里生成应用专用密码。",
+            "Outlook/Hotmail：到账户安全设置里生成应用密码；如果账号不支持应用密码，需确认账号是否允许 IMAP。",
+        ]
+    )
     return f"""
     <section class="config">
       <h2>第一次使用</h2>
@@ -898,6 +907,10 @@ def _onboarding_html(values, configured):
         <li>在下面填写邮箱账号和授权码，点击保存账号。</li>
       </ol>
       <div class="sub">{html.escape(provider_hint)}</div>
+      <details>
+        <summary>不同邮箱怎么拿授权码</summary>
+        <ul class="steps">{provider_rows}</ul>
+      </details>
     </section>
 """
 

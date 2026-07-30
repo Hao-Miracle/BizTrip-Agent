@@ -90,34 +90,46 @@
 
 ## 🚀 快速开始
 
-### 1. 克隆仓库
+### 1. 先确认有 Python
 
 ```bash
-git clone https://github.com/Hao-Miracle/BizTrip-Agent.git
-cd BizTrip-Agent
+python3 --version
 ```
 
-### 2. 安装
+如果提示找不到 `python3`，或版本低于 `3.8`，先安装 Python 3.8+。
+macOS 用户可以从 [python.org](https://www.python.org/downloads/) 安装，或使用 Homebrew：
 
 ```bash
-# 推荐：隔离安装命令行工具
-pipx install -e .
-
-# 或者在当前 Python 环境中安装
-pip install -e .
+brew install python
 ```
 
-### 3. 先跑 Demo（不需要邮箱）
-
-想用网页操作时，启动本地工作台：
+### 2. 一条命令安装并启动
 
 ```bash
-biztrip web
+git clone https://github.com/Hao-Miracle/BizTrip-Agent.git && cd BizTrip-Agent && python3 -m venv .venv && .venv/bin/python -m pip install -e . && .venv/bin/biztrip web
 ```
+
+这条命令会自动安装项目需要的 Python 依赖。它不会替你安装 Python 本身，也不会替你生成邮箱授权码。
+
+### 3. 首次配置邮箱
+
+Web 页面打开后，按“第一次使用”提示操作：
+
+1. 打开邮箱设置，开启 IMAP/SMTP 服务
+2. 生成邮箱授权码或应用专用密码，不要使用登录密码
+3. 在页面填写邮箱账号和授权码，点击保存账号
 
 它会打开本地页面。账号只配置一次；填写本次报销期间后点击“开始生成”，系统会自动选择 IMAP 服务器并生成报销包。
-页面也会显示 Python、依赖和 `.env` 配置状态，但不会展示邮箱授权码或 API Key。
+页面只显示准备状态和首次使用指引，不会展示邮箱授权码或 API Key。
 真实扫描会在后台运行，页面会显示任务状态、错误原因和生成文件。
+
+### 4. 以后再次启动
+
+```bash
+cd BizTrip-Agent && .venv/bin/biztrip web
+```
+
+### 5. 先跑 Demo（不需要邮箱）
 
 不熟悉命令行参数时，先用引导模式：
 

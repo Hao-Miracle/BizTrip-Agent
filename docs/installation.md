@@ -12,6 +12,18 @@
 | **邮箱** | 已开启 IMAP 服务，并获取授权码/应用专用密码 |
 | **LLM API Key（可选）** | 如需 AI 增强功能，准备兼容 OpenAI 协议的 API Key |
 
+如果不确定电脑有没有 Python：
+
+```bash
+python3 --version
+```
+
+如果提示找不到 `python3`，或版本低于 `3.8`，先安装 Python 3.8+。macOS 用户可以从 [python.org](https://www.python.org/downloads/) 安装，或使用 Homebrew：
+
+```bash
+brew install python
+```
+
 ---
 
 ## 支持的邮箱服务商
@@ -30,47 +42,36 @@
 
 ## 安装步骤
 
-### 方式一：克隆仓库（推荐）
+### 一条命令安装并启动
 
 ```bash
-git clone https://github.com/Hao-Miracle/BizTrip-Agent.git
-cd BizTrip-Agent
+git clone https://github.com/Hao-Miracle/BizTrip-Agent.git && cd BizTrip-Agent && python3 -m venv .venv && .venv/bin/python -m pip install -e . && .venv/bin/biztrip web
 ```
 
-### 方式二：下载 ZIP
+这条命令会自动安装项目需要的 Python 依赖，包括 `python-dotenv`、`PyPDF2`、`openpyxl` 和本地 `biztrip` 命令。它不会自动安装 Python 本身，也不会替你开启邮箱 IMAP 或生成邮箱授权码。
+
+### 下载 ZIP
 
 直接从 [Releases](https://github.com/Hao-Miracle/BizTrip-Agent/releases) 下载最新版本的 ZIP 包，解压后进入目录。
 
 ---
 
-## 安装依赖
+## 手动安装依赖
 
-### 推荐：安装为本地命令
+通常不需要手动执行这些命令；一条命令安装会自动完成。需要排查安装问题时，可以手动运行：
 
 ```bash
-pipx install -e .
-biztrip web
+python3 -m venv .venv
+.venv/bin/python -m pip install -e .
+.venv/bin/biztrip web
 ```
 
-如果没有 `pipx`，也可以用当前 Python 环境：
+### LLM 增强依赖（可选）
+
+普通报销扫描不需要安装 `openai`。只有启用 LLM 增强时才需要：
 
 ```bash
-pip install -e .
-biztrip web
-```
-
-### 规则模式（零 API Key，推荐先试用）
-
-```bash
-pip install python-dotenv PyPDF2 openpyxl
-```
-
-### Agent 模式（LLM 增强，可选）
-
-在规则模式基础上，额外安装：
-
-```bash
-pip install openai
+.venv/bin/python -m pip install -e ".[llm]"
 ```
 
 ---
