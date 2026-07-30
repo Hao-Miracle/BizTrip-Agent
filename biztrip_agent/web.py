@@ -730,19 +730,23 @@ def _run_init():
 
 def _run_config(form):
     env_path = _env_path()
+    existing = _read_env_values(env_path)
     updates = {}
     plain_fields = ["EMAIL_ACCOUNT", "EMAIL_IMAP_SERVER", "LLM_BASE_URL", "LLM_MODEL"]
     secret_fields = ["EMAIL_PASSWORD", "LLM_API_KEY"]
     for key in plain_fields:
         value = form.get(key, "").strip()
-        updates[key] = value
+        if value or key in {"EMAIL_ACCOUNT", "EMAIL_IMAP_SERVER"}:
+            updates[key] = value
     for key in secret_fields:
         value = form.get(key, "").strip()
         if value:
             updates[key] = value
-    if updates.get("LLM_API_KEY") or _read_env_values(env_path).get("LLM_API_KEY"):
-        updates["LLM_BASE_URL"] = updates.get("LLM_BASE_URL") or "https://api.deepseek.com/v1"
-        updates["LLM_MODEL"] = updates.get("LLM_MODEL") or "deepseek-chat"
+    if updates.get("LLM_API_KEY") or existing.get("LLM_API_KEY"):
+        if not updates.get("LLM_BASE_URL") and not existing.get("LLM_BASE_URL"):
+            updates["LLM_BASE_URL"] = "https://api.deepseek.com/v1"
+        if not updates.get("LLM_MODEL") and not existing.get("LLM_MODEL"):
+            updates["LLM_MODEL"] = "deepseek-chat"
     if not updates.get("EMAIL_ACCOUNT"):
         return render_home(error="邮箱账号不能为空。")
     _write_env_values(env_path, updates)
@@ -1045,15 +1049,15 @@ def _tools_html():
 
 def _advanced_config_html(values, account):
     llm_enabled = bool(values.get("LLM_API_KEY"))
-    llm_status = "已启用。扫描时会优先使用 LLM，失败时自动回到规则模式。" if llm_enabled else "不配置也能使用规则模式。想增强复杂邮件识别时，只需要填写 API Key。"
+    llm_status = "已启用。点击开始生成时自动调用；没有单独对话窗口，失败时自动回到规则模式。" if llm_enabled else "不配置也能使用规则模式。想增强复杂邮件识别时，只填写 API Key。"
     return f"""
       <details>
         <summary>高级配置</summary>
         <div class="sub">LLM 增强：{html.escape(llm_status)}</div>
         <ol class="steps">
-          <li>从兼容 OpenAI 协议的服务商获取 API Key，例如 DeepSeek。</li>
-          <li>把 API Key 填到下面的 LLM API Key。</li>
-          <li>Base URL 和 Model 留空时，系统默认使用 DeepSeek：api.deepseek.com / deepseek-chat。</li>
+          <li>从 DeepSeek 等服务商获取 API Key。</li>
+          <li>填到下面的 LLM API Key，保存即可。</li>
+          <li>之后点击“开始生成”时，系统会自动用 LLM 辅助分类、提取和行程聚合。</li>
         </ol>
         <form method="post" action="/config">
           <div class="config-grid">
@@ -1073,15 +1077,20 @@ def _advanced_config_html(values, account):
             <label for="cfg-key">LLM API Key（可选）</label>
             <input id="cfg-key" name="LLM_API_KEY" type="password" placeholder="{_secret_placeholder(values.get("LLM_API_KEY"))}">
           </div>
-          <div>
-            <label for="cfg-base">LLM Base URL（可选）</label>
-            <input id="cfg-base" name="LLM_BASE_URL" type="text" value="{html.escape(values.get("LLM_BASE_URL", ""))}" placeholder="https://api.deepseek.com/v1">
           </div>
-          <div>
-            <label for="cfg-model">LLM Model（可选）</label>
-            <input id="cfg-model" name="LLM_MODEL" type="text" value="{html.escape(values.get("LLM_MODEL", ""))}" placeholder="deepseek-chat">
-          </div>
-          </div>
+          <details>
+            <summary>更换模型服务商</summary>
+            <div class="config-grid">
+              <div>
+                <label for="cfg-base">LLM Base URL</label>
+                <input id="cfg-base" name="LLM_BASE_URL" type="text" value="{html.escape(values.get("LLM_BASE_URL", ""))}" placeholder="https://api.deepseek.com/v1">
+              </div>
+              <div>
+                <label for="cfg-model">LLM Model</label>
+                <input id="cfg-model" name="LLM_MODEL" type="text" value="{html.escape(values.get("LLM_MODEL", ""))}" placeholder="deepseek-chat">
+              </div>
+            </div>
+          </details>
           <button type="submit">保存高级配置</button>
         </form>
       </details>

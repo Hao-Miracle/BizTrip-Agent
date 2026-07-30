@@ -47,6 +47,9 @@ def test_web_home_contains_local_workflows():
     assert "维护工具" in html
     assert "高级配置" in html
     assert "LLM 增强" in html
+    assert "点击开始生成时自动调用" in html
+    assert "没有单独对话窗口" in html
+    assert "更换模型服务商" in html
     assert "deepseek-chat" in html
     assert "准备状态" in html
     assert "诊断信息" in html
@@ -347,6 +350,34 @@ def test_config_form_defaults_llm_provider_when_key_is_added(monkeypatch, tmp_pa
     assert values["LLM_BASE_URL"] == "https://api.deepseek.com/v1"
     assert values["LLM_MODEL"] == "deepseek-chat"
     assert "sk-test" not in html
+
+
+def test_config_form_keeps_existing_custom_llm_provider(monkeypatch, tmp_path):
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "EMAIL_ACCOUNT=user@example.com\n"
+        "EMAIL_PASSWORD=keep-me\n"
+        "LLM_API_KEY=keep-key\n"
+        "LLM_BASE_URL=https://api.example.com/v1\n"
+        "LLM_MODEL=example-chat\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("biztrip_agent.web._env_path", lambda: env_path)
+
+    _run_config(
+        {
+            "EMAIL_ACCOUNT": "user@example.com",
+            "EMAIL_PASSWORD": "",
+            "EMAIL_IMAP_SERVER": "",
+            "LLM_API_KEY": "",
+            "LLM_BASE_URL": "",
+            "LLM_MODEL": "",
+        }
+    )
+
+    values = _read_env_values(env_path)
+    assert values["LLM_BASE_URL"] == "https://api.example.com/v1"
+    assert values["LLM_MODEL"] == "example-chat"
 
 
 def test_web_home_supports_head_request():

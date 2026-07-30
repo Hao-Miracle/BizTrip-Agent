@@ -94,7 +94,7 @@ biztrip web
 
 ### （可选）配置 LLM
 
-普通报销扫描不需要 LLM。想启用增强识别时，在 Web 页面展开“高级配置”，填写 `LLM API Key` 即可。Base URL 和 Model 留空时，系统默认使用 DeepSeek：
+普通报销扫描不需要 LLM。想启用增强识别时，在 Web 页面展开“高级配置”，填写 `LLM API Key` 即可。配置后不需要进入对话窗口，点击“开始生成”时系统会自动调用 LLM 辅助分类、提取和行程聚合。Base URL 和 Model 留空时，系统默认使用 DeepSeek：
 
 | 字段 | 默认值 |
 |------|--------|
