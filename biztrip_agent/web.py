@@ -732,11 +732,11 @@ def _run_config(form):
     env_path = _env_path()
     existing = _read_env_values(env_path)
     updates = {}
-    plain_fields = ["EMAIL_ACCOUNT", "EMAIL_IMAP_SERVER", "LLM_BASE_URL", "LLM_MODEL"]
-    secret_fields = ["EMAIL_PASSWORD", "LLM_API_KEY"]
+    plain_fields = ["LLM_BASE_URL", "LLM_MODEL"]
+    secret_fields = ["LLM_API_KEY"]
     for key in plain_fields:
         value = form.get(key, "").strip()
-        if value or key in {"EMAIL_ACCOUNT", "EMAIL_IMAP_SERVER"}:
+        if value:
             updates[key] = value
     for key in secret_fields:
         value = form.get(key, "").strip()
@@ -747,10 +747,8 @@ def _run_config(form):
             updates["LLM_BASE_URL"] = "https://api.deepseek.com/v1"
         if not updates.get("LLM_MODEL") and not existing.get("LLM_MODEL"):
             updates["LLM_MODEL"] = "deepseek-chat"
-    if not updates.get("EMAIL_ACCOUNT") and existing.get("EMAIL_ACCOUNT"):
-        updates.pop("EMAIL_ACCOUNT", None)
-    if not updates.get("EMAIL_ACCOUNT") and not existing.get("EMAIL_ACCOUNT"):
-        return render_home(error="邮箱账号不能为空。")
+    if not updates:
+        return render_home(message="没有新的高级配置需要保存。")
     _write_env_values(env_path, updates)
     return render_home(message="配置已保存。密码和 API Key 不会在页面显示。")
 
@@ -876,7 +874,6 @@ def _config_html():
     account_html = _account_html(values, account, configured)
     scan_html = _scan_html(configured)
     llm_html = _llm_config_html(values)
-    advanced_html = _advanced_config_html(values, account)
     return f"""
     {onboarding_html}
     <section class="config">
@@ -889,9 +886,6 @@ def _config_html():
     </section>
     <section class="config">
       {llm_html}
-    </section>
-    <section class="config">
-      {advanced_html}
     </section>
 """
 
@@ -1079,31 +1073,6 @@ def _tools_html():
         </div>
       </details>
     </section>
-"""
-
-
-def _advanced_config_html(values, account):
-    return f"""
-      <details>
-        <summary>高级配置</summary>
-        <form method="post" action="/config">
-          <div class="config-grid">
-            <div>
-              <label for="adv-email">邮箱账号</label>
-              <input id="adv-email" name="EMAIL_ACCOUNT" type="text" value="{html.escape(account)}">
-            </div>
-            <div>
-              <label for="adv-password">邮箱授权码</label>
-              <input id="adv-password" name="EMAIL_PASSWORD" type="password" placeholder="{_secret_placeholder(values.get("EMAIL_PASSWORD"))}">
-            </div>
-          <div>
-            <label for="cfg-imap">IMAP 服务器</label>
-            <input id="cfg-imap" name="EMAIL_IMAP_SERVER" type="text" value="{html.escape(values.get("EMAIL_IMAP_SERVER", ""))}" placeholder="{html.escape(_infer_imap_server(account) or "可留空自动推断")}">
-          </div>
-          </div>
-          <button type="submit">保存高级配置</button>
-        </form>
-      </details>
 """
 
 

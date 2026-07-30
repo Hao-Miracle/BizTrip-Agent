@@ -46,7 +46,6 @@ def test_web_home_contains_local_workflows(monkeypatch, tmp_path):
     assert "报销结束日期" in html
     assert "高级扫描选项" in html
     assert "维护工具" in html
-    assert "高级配置" in html
     assert "LLM 增强配置" in html
     assert "接口地址" in html
     assert "API Key" in html
@@ -305,27 +304,26 @@ def test_env_writer_preserves_comments_and_updates_values(tmp_path):
     assert _read_env_values(env_path)["EMAIL_ACCOUNT"] == "new@example.com"
 
 
-def test_config_form_saves_without_overwriting_blank_secrets(monkeypatch, tmp_path):
+def test_llm_config_saves_without_overwriting_blank_secret(monkeypatch, tmp_path):
     env_path = tmp_path / ".env"
     env_path.write_text("EMAIL_ACCOUNT=old@example.com\nEMAIL_PASSWORD=keep-me\nLLM_API_KEY=keep-key\n", encoding="utf-8")
     monkeypatch.setattr("biztrip_agent.web._env_path", lambda: env_path)
 
     html = _run_config(
         {
-            "EMAIL_ACCOUNT": "user@example.com",
-            "EMAIL_PASSWORD": "",
-            "EMAIL_IMAP_SERVER": "imap.example.com",
             "LLM_API_KEY": "",
             "LLM_BASE_URL": "https://api.example.com/v1",
+            "LLM_MODEL": "example-chat",
         }
     )
 
     values = _read_env_values(env_path)
     assert "配置已保存" in html
-    assert values["EMAIL_ACCOUNT"] == "user@example.com"
+    assert values["EMAIL_ACCOUNT"] == "old@example.com"
     assert values["EMAIL_PASSWORD"] == "keep-me"
     assert values["LLM_API_KEY"] == "keep-key"
-    assert values["EMAIL_IMAP_SERVER"] == "imap.example.com"
+    assert values["LLM_BASE_URL"] == "https://api.example.com/v1"
+    assert values["LLM_MODEL"] == "example-chat"
     assert "keep-me" not in html
     assert "keep-key" not in html
 
@@ -338,10 +336,9 @@ def test_config_form_defaults_llm_provider_when_key_is_added(monkeypatch, tmp_pa
     html = _run_config(
         {
             "EMAIL_ACCOUNT": "user@example.com",
-            "EMAIL_PASSWORD": "",
-            "EMAIL_IMAP_SERVER": "",
             "LLM_API_KEY": "sk-test",
             "LLM_BASE_URL": "",
+            "LLM_MODEL": "",
         }
     )
 
@@ -360,8 +357,6 @@ def test_llm_config_can_be_saved_separately(monkeypatch, tmp_path):
 
     html = _run_config(
         {
-            "EMAIL_ACCOUNT": "",
-            "EMAIL_IMAP_SERVER": "",
             "LLM_BASE_URL": "http://127.0.0.1:8000/v1",
             "LLM_API_KEY": "sk-test",
             "LLM_MODEL": "Qwen3.5-9B",
@@ -391,10 +386,9 @@ def test_config_form_keeps_existing_custom_llm_provider(monkeypatch, tmp_path):
     _run_config(
         {
             "EMAIL_ACCOUNT": "user@example.com",
-            "EMAIL_PASSWORD": "",
-            "EMAIL_IMAP_SERVER": "",
             "LLM_API_KEY": "",
             "LLM_BASE_URL": "",
+            "LLM_MODEL": "",
         }
     )
 
