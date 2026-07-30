@@ -145,6 +145,8 @@ A: 检查以下几点：
 2. 密码是否为**授权码**（不是登录密码）
 3. 网络是否能访问 IMAP 服务器（企业网络可能有限制）
 
+QQ 邮箱如果提示 `Login fail. Account is abnormal, service is not open, password is incorrect, login frequency limited...`，通常需要重新确认 IMAP/SMTP 已开启，并重新生成授权码；连续失败后可能会被临时限频，等待几分钟再试。
+
 ### Q: Python 版本不够
 
 A: 升级 Python 到 3.8 或更高版本。推荐使用 [pyenv](https://github.com/pyenv/pyenv) 管理 Python 版本。

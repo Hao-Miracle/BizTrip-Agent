@@ -1,4 +1,3 @@
-from datetime import datetime
 from http.client import HTTPConnection
 from threading import Thread
 import time
@@ -9,10 +8,12 @@ from biztrip_agent.cli import main
 from biztrip_agent.web import (
     BizTripWebHandler,
     _friendly_error,
+    _infer_imap_server,
     _job_snapshot,
     _preflight_scan,
     _read_env_values,
     _result_summary,
+    _run_account,
     _run_config,
     _run_demo,
     _run_scan,
@@ -33,9 +34,13 @@ def test_web_home_contains_local_workflows():
     assert 'action="/scan"' in html
     assert 'action="/init"' in html
     assert 'action="/config"' in html
-    assert "邮箱配置" in html
+    assert "账号" in html
+    assert "开始扫描" in html
+    assert "保存账号" in html
+    assert "按日期扫描" in html
+    assert "高级配置" in html
     assert "本地就绪检查" in html
-    assert "records_YYYYMMDD.json" in html
+    assert "records_YYYYMMDD_HHMMSS.json" in html
 
 
 def test_web_rejects_invalid_port():
@@ -45,10 +50,9 @@ def test_web_rejects_invalid_port():
 def test_web_demo_form_generates_files(tmp_path):
     html = _run_demo({"output_dir": str(tmp_path), "review": "on"})
 
-    today = datetime.now().strftime("%Y%m%d")
     assert "Demo 已生成" in html
-    assert (tmp_path / f"差旅汇总_demo_{today}.xlsx").exists()
-    assert (tmp_path / f"review_{today}.html").exists()
+    assert next(tmp_path.glob("差旅汇总_demo_*.xlsx")).exists()
+    assert next(tmp_path.glob("review_*.html")).exists()
 
 
 def test_scan_form_validates_inputs():
@@ -98,6 +102,40 @@ def test_web_scan_form_passes_safe_args(monkeypatch, tmp_path):
     assert "LLM_API_KEY" not in str(snapshot)
 
 
+def test_account_form_saves_config_and_infers_imap(monkeypatch, tmp_path):
+    env_path = tmp_path / ".env"
+    monkeypatch.setattr("biztrip_agent.web._env_path", lambda: env_path)
+
+    html = _run_account(
+        {
+            "EMAIL_ACCOUNT": "user@qq.com",
+            "EMAIL_PASSWORD": "mail-token",
+        }
+    )
+
+    values = _read_env_values(env_path)
+    assert "账号已保存" in html
+    assert values["EMAIL_ACCOUNT"] == "user@qq.com"
+    assert values["EMAIL_PASSWORD"] == "mail-token"
+    assert values["EMAIL_IMAP_SERVER"] == "imap.qq.com"
+    assert values["EMAIL_IMAP_PORT"] == "993"
+
+
+def test_account_form_requires_password_when_missing(monkeypatch, tmp_path):
+    monkeypatch.setattr("biztrip_agent.web._env_path", lambda: tmp_path / ".env")
+
+    html = _run_account({"EMAIL_ACCOUNT": "user@qq.com", "EMAIL_PASSWORD": ""})
+
+    assert "请填写邮箱授权码" in html
+
+
+def test_infer_imap_server_from_email_address():
+    assert _infer_imap_server("user@qq.com") == "imap.qq.com"
+    assert _infer_imap_server("user@163.com") == "imap.163.com"
+    assert _infer_imap_server("user@gmail.com") == "imap.gmail.com"
+    assert _infer_imap_server("user@example.com") == ""
+
+
 def test_scan_preflight_requires_email_config(monkeypatch, tmp_path):
     monkeypatch.setattr("biztrip_agent.web._env_path", lambda: tmp_path / ".env")
 
@@ -135,6 +173,12 @@ def test_result_summary_reads_latest_records_json(tmp_path):
 
 
 def test_friendly_error_maps_common_failures():
+    qq_error = (
+        "Login fail. Account is abnormal, service is not open, password is incorrect, "
+        "login frequency limited, or system is busy. More information at "
+        "https://help.mail.qq.com/detail/108/1023"
+    )
+    assert "QQ 邮箱登录失败" in _friendly_error(RuntimeError(qq_error))
     assert "邮箱登录失败" in _friendly_error(RuntimeError("authentication failed"))
     assert "网络连接失败" in _friendly_error(RuntimeError("timed out"))
 
@@ -165,13 +209,13 @@ def test_env_writer_preserves_comments_and_updates_values(tmp_path):
     env_path = tmp_path / ".env"
     env_path.write_text("# config\nEMAIL_ACCOUNT=old@example.com\nEMAIL_PASSWORD=old-token\n", encoding="utf-8")
 
-    _write_env_values(env_path, {"EMAIL_ACCOUNT": "new@example.com", "IMAP_SERVER": "imap.example.com"})
+    _write_env_values(env_path, {"EMAIL_ACCOUNT": "new@example.com", "EMAIL_IMAP_SERVER": "imap.example.com"})
 
     text = env_path.read_text(encoding="utf-8")
     assert "# config" in text
     assert "EMAIL_ACCOUNT=new@example.com" in text
     assert "EMAIL_PASSWORD=old-token" in text
-    assert "IMAP_SERVER=imap.example.com" in text
+    assert "EMAIL_IMAP_SERVER=imap.example.com" in text
     assert _read_env_values(env_path)["EMAIL_ACCOUNT"] == "new@example.com"
 
 
@@ -184,7 +228,7 @@ def test_config_form_saves_without_overwriting_blank_secrets(monkeypatch, tmp_pa
         {
             "EMAIL_ACCOUNT": "user@example.com",
             "EMAIL_PASSWORD": "",
-            "IMAP_SERVER": "imap.example.com",
+            "EMAIL_IMAP_SERVER": "imap.example.com",
             "LLM_API_KEY": "",
             "LLM_BASE_URL": "https://api.example.com/v1",
             "LLM_MODEL": "example-chat",
@@ -196,7 +240,7 @@ def test_config_form_saves_without_overwriting_blank_secrets(monkeypatch, tmp_pa
     assert values["EMAIL_ACCOUNT"] == "user@example.com"
     assert values["EMAIL_PASSWORD"] == "keep-me"
     assert values["LLM_API_KEY"] == "keep-key"
-    assert values["IMAP_SERVER"] == "imap.example.com"
+    assert values["EMAIL_IMAP_SERVER"] == "imap.example.com"
     assert "keep-me" not in html
     assert "keep-key" not in html
 

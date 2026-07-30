@@ -1,5 +1,4 @@
 from pathlib import Path
-from datetime import datetime
 
 from openpyxl import load_workbook
 
@@ -11,9 +10,8 @@ def test_demo_generates_excel_and_review(tmp_path):
     exit_code = main(["demo", "--review", "--output-dir", str(tmp_path)])
 
     assert exit_code == 0
-    today = datetime.now().strftime("%Y%m%d")
-    workbook_path = tmp_path / f"差旅汇总_demo_{today}.xlsx"
-    review_path = tmp_path / f"review_{today}.html"
+    workbook_path = next(tmp_path.glob("差旅汇总_demo_*.xlsx"))
+    review_path = next(tmp_path.glob("review_*.html"))
     assert workbook_path.exists()
     assert review_path.exists()
 
@@ -32,10 +30,9 @@ def test_wizard_generates_demo_with_review(tmp_path, monkeypatch):
 
     exit_code = main(["wizard"])
 
-    today = datetime.now().strftime("%Y%m%d")
     assert exit_code == 0
-    assert (tmp_path / f"差旅汇总_demo_{today}.xlsx").exists()
-    assert (tmp_path / f"review_{today}.html").exists()
+    assert next(tmp_path.glob("差旅汇总_demo_*.xlsx")).exists()
+    assert next(tmp_path.glob("review_*.html")).exists()
 
 
 def test_review_flags_missing_fields(tmp_path):

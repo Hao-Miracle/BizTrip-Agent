@@ -8,12 +8,31 @@ from pathlib import Path
 SCHEMA_VERSION = "biztrip.records.v1"
 
 
+def output_timestamp():
+    """Return a readable timestamp for generated report files."""
+    return datetime.now().strftime("%Y%m%d_%H%M%S")
+
+
+def unique_output_path(directory, stem, suffix):
+    """Return a non-overwriting path under directory."""
+    directory = Path(directory)
+    path = directory / f"{stem}_{output_timestamp()}{suffix}"
+    if not path.exists():
+        return path
+    index = 1
+    while True:
+        candidate = directory / f"{path.stem}_{index}{suffix}"
+        if not candidate.exists():
+            return candidate
+        index += 1
+
+
 def write_results_json(records, trips, output_dir, scan_label, xlsx_path=None, review_path=None):
     """Write scan results to a JSON file and return its path."""
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     total = sum(record.get("金额", 0) or 0 for record in records)
-    path = output_dir / f"records_{datetime.now().strftime('%Y%m%d')}.json"
+    path = unique_output_path(output_dir, "records", ".json")
 
     payload = {
         "schema_version": SCHEMA_VERSION,

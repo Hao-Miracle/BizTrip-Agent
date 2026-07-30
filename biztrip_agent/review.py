@@ -5,6 +5,8 @@ from datetime import datetime
 from html import escape
 from pathlib import Path
 
+from biztrip_agent.results import unique_output_path
+
 
 def generate_review_html(records, trips, output_dir, scan_label, excel_path=None):
     """Write a self-contained HTML review page and return its path."""
@@ -15,7 +17,7 @@ def generate_review_html(records, trips, output_dir, scan_label, excel_path=None
     issues = _issue_rows(records)
     categories = _category_totals(records)
     generated_at = datetime.now().strftime("%Y-%m-%d %H:%M")
-    review_path = output_dir / f"review_{datetime.now().strftime('%Y%m%d')}.html"
+    review_path = unique_output_path(output_dir, "review", ".html")
 
     html = f"""<!doctype html>
 <html lang="zh-CN">

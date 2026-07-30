@@ -12,7 +12,7 @@
 biztrip web
 ```
 
-`web` 会启动只绑定本机的页面，用表单扫描邮箱、生成 Demo，或从已有 `records_YYYYMMDD.json` 重新生成报表。它不会展示邮箱授权码，也不会修改邮箱配置。
+`web` 会启动只绑定本机的页面。账号只需要配置一次；之后每次扫描只选择最近邮件数量或日期范围。系统会按邮箱地址自动选择 IMAP 服务器。页面也可以生成 Demo，或从已有 `records_YYYYMMDD_HHMMSS.json` 重新生成报表。
 
 页面顶部会显示本地就绪检查：
 - Python 版本
@@ -23,7 +23,7 @@ biztrip web
 
 这些状态只显示“已填写/未填写”，不会展示邮箱授权码或 API Key。页面里的“生成 .env 模板”按钮不会覆盖已有 `.env`。
 
-如果 `.env` 已存在但还没填写内容，可以直接在页面的“邮箱配置”区域填写邮箱账号、邮箱授权码和可选 LLM 配置。授权码和 API Key 保存后不会回显；之后再次保存时，留空会保留原值。
+如果 `.env` 已存在但还没填写内容，可以直接在页面的“账号”区域填写邮箱账号和邮箱授权码。系统会按邮箱地址自动选择 IMAP 服务器；高级配置默认折叠，授权码和 API Key 保存后不会回显。
 
 如果不想自动打开浏览器：
 
@@ -31,12 +31,7 @@ biztrip web
 biztrip web --no-open
 ```
 
-Web 扫描表单支持：
-- 开始日期 / 结束日期
-- 扫描邮件数量
-- 输出目录
-- 是否生成审阅页面
-- 是否强制规则模式
+默认扫描会使用最近 60 封邮件、输出到 `output/`，并生成审阅页面。需要指定日期范围时，展开“按日期扫描”；需要 LLM 或手动 IMAP 时，展开“高级配置”。
 
 点击“开始扫描”后会进入后台任务模式，页面会显示排队、运行、完成或失败状态。扫描成功后会列出生成的 Excel、JSON 和审阅页路径；扫描失败时会优先显示可读原因，例如授权码错误、IMAP 未开启、网络失败或输出目录不可写。
 
@@ -46,7 +41,7 @@ Web 扫描表单支持：
 biztrip wizard
 ```
 
-`wizard` 会用问答方式引导你生成 Demo、从已有 `records_YYYYMMDD.json` 重新生成报表，或检查本地环境。它不会读取邮箱，也不会修改邮箱配置。
+`wizard` 会用问答方式引导你生成 Demo、从已有 `records_YYYYMMDD_HHMMSS.json` 重新生成报表，或检查本地环境。它不会读取邮箱，也不会修改邮箱配置。
 
 ### 先跑 Demo（不需要邮箱）
 
@@ -57,7 +52,7 @@ biztrip demo
 运行后会用虚构差旅数据生成示例报表：
 
 ```
-output/差旅汇总_demo_YYYYMMDD.xlsx
+output/差旅汇总_demo_YYYYMMDD_HHMMSS.xlsx
 ```
 
 这一步不读取 `.env`，也不会连接邮箱。
@@ -71,7 +66,7 @@ biztrip demo --review
 审阅页面会输出到：
 
 ```
-output/review_YYYYMMDD.html
+output/review_YYYYMMDD_HHMMSS.html
 ```
 
 ### 检查本地环境
@@ -129,8 +124,8 @@ python3 phase2/agent_report.py
 
 ```
 output/
-├── 差旅汇总_YYYYMMDD.xlsx    ← 三 Sheet Excel 报表
-├── records_YYYYMMDD.json      ← 结构化扫描结果
+├── 差旅汇总_YYYYMMDD_HHMMSS.xlsx    ← 三 Sheet Excel 报表
+├── records_YYYYMMDD_HHMMSS.json      ← 结构化扫描结果
 └── 附件/                        ← 原始 PDF/ZIP 原件归档
     ├── 机票/
     ├── 火车票/
@@ -147,14 +142,14 @@ output/
 | **费用明细** | 所有记录，按日期排序，最高金额红色高亮，标注提取方法 |
 | **按供应商** | 各平台消费排名，隔行配色 |
 
-`records_YYYYMMDD.json` 是中间结果文件，包含提取记录、行程分组、总金额和生成文件路径。后续复查问题或重新生成报表时，可以优先复用这个文件，避免反复扫描邮箱。
+`records_YYYYMMDD_HHMMSS.json` 是中间结果文件，包含提取记录、行程分组、总金额和生成文件路径。后续复查问题或重新生成报表时，可以优先复用这个文件，避免反复扫描邮箱。文件名带生成时间，同一天重复扫描不会覆盖旧结果。
 
 ### 从 JSON 重新生成
 
 ```bash
-biztrip rebuild output/records_YYYYMMDD.json
-biztrip rebuild output/records_YYYYMMDD.json --review
-biztrip rebuild output/records_YYYYMMDD.json --output-dir output/rebuilt
+biztrip rebuild output/records_YYYYMMDD_HHMMSS.json
+biztrip rebuild output/records_YYYYMMDD_HHMMSS.json --review
+biztrip rebuild output/records_YYYYMMDD_HHMMSS.json --output-dir output/rebuilt
 ```
 
 `rebuild` 不会连接邮箱，只读取已保存的 JSON 结果，重新生成 Excel 和可选的 HTML 审阅页。

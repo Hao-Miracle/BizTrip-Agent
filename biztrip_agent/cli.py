@@ -50,7 +50,7 @@ def main(argv=None):
         help="Directory for reports and archived attachments. Defaults to ./output.",
     )
     rebuild_parser = subparsers.add_parser("rebuild", help="Regenerate reports from a records JSON file.")
-    rebuild_parser.add_argument("json_path", help="Path to records_YYYYMMDD.json.")
+    rebuild_parser.add_argument("json_path", help="Path to records_YYYYMMDD_HHMMSS.json.")
     rebuild_parser.add_argument("--review", action="store_true", help="Also regenerate a local HTML review page.")
     rebuild_parser.add_argument(
         "--output-dir",
@@ -195,7 +195,9 @@ def demo(output_dir, review=False):
     for col, width in enumerate([20, 10, 14, 10], 1):
         ws3.column_dimensions[get_column_letter(col)].width = width
 
-    report_path = output_dir / f"差旅汇总_demo_{datetime.now().strftime('%Y%m%d')}.xlsx"
+    from biztrip_agent.results import unique_output_path
+
+    report_path = unique_output_path(output_dir, "差旅汇总_demo", ".xlsx")
     wb.save(report_path)
 
     print("Demo report generated.")
@@ -275,7 +277,7 @@ def wizard():
         review = _confirm("Also create a review page?", default=True)
         return demo(Path(output_dir), review=review)
     if choice == "2":
-        json_path = input("Path to records_YYYYMMDD.json: ").strip()
+        json_path = input("Path to records_YYYYMMDD_HHMMSS.json: ").strip()
         if not json_path:
             print("A JSON path is required.")
             return 2
@@ -342,7 +344,8 @@ def rebuild(args):
     """Regenerate Excel and optional review HTML from a saved JSON result."""
     try:
         from biztrip_agent.results import load_results_json, write_results_json
-        from phase2.agent_report import _generate_excel
+        from phase2.agent_report import _generate_excel, enrich_records_from_attachments
+        from phase2.llm_aggregate import aggregate_trips
     except ImportError as exc:
         print(f"Unable to load rebuild tools: {exc}")
         return 1
@@ -360,12 +363,14 @@ def rebuild(args):
 
     output_dir = Path(args.output_dir) if args.output_dir else json_path.parent
     records = payload["records"]
-    trips = payload["trips"]
+    enrich_records_from_attachments(records, output_dir=json_path.parent)
+    trips = aggregate_trips(records, use_llm=False)
+    total_amount = sum(record.get("金额", 0) or 0 for record in records)
     scan_label = payload.get("scan_label") or "JSON rebuild"
     xlsx_path = _generate_excel(
         records,
         trips,
-        payload.get("summary", {}).get("total_amount", 0),
+        total_amount,
         scan_label,
         output_dir=str(output_dir),
         use_llm=False,

@@ -73,6 +73,9 @@ class BizTripWebHandler(BaseHTTPRequestHandler):
         if self.path == "/scan":
             self._send_json(_run_scan(form))
             return
+        if self.path == "/account":
+            self._send_html(_run_account(form))
+            return
         if self.path == "/init":
             self._send_html(_run_init())
             return
@@ -273,6 +276,15 @@ def render_home(message=None, error=None, files=None, result_summary=None):
       grid-template-columns: repeat(2, minmax(220px, 1fr));
       gap: 12px;
     }}
+    details {{
+      grid-column: 1 / -1;
+      margin-top: 10px;
+    }}
+    summary {{
+      cursor: pointer;
+      color: var(--blue);
+      font-weight: 650;
+    }}
     @media (max-width: 760px) {{
       header, main {{ padding-left: 16px; padding-right: 16px; }}
       main {{ grid-template-columns: 1fr; }}
@@ -298,22 +310,6 @@ def render_home(message=None, error=None, files=None, result_summary=None):
     {readiness_html}
     {config_html}
     <section>
-      <h2>扫描邮箱</h2>
-      <form method="post" action="/scan" data-background="true">
-        <label for="scan-start">开始日期</label>
-        <input id="scan-start" name="start" type="text" placeholder="YYYY-MM-DD，可留空">
-        <label for="scan-end">结束日期</label>
-        <input id="scan-end" name="end" type="text" placeholder="YYYY-MM-DD，可留空">
-        <label for="scan-count">扫描邮件数量</label>
-        <input id="scan-count" name="count" type="number" min="1" value="60">
-        <label for="scan-output">输出目录</label>
-        <input id="scan-output" name="output_dir" type="text" value="output">
-        <label class="check"><input name="review" type="checkbox" checked> 同时生成审阅页面</label>
-        <label class="check"><input name="no_llm" type="checkbox"> 只用规则模式</label>
-        <button type="submit">开始扫描</button>
-      </form>
-    </section>
-    <section>
       <h2>生成 Demo</h2>
       <form method="post" action="/demo">
         <label for="demo-output">输出目录</label>
@@ -325,8 +321,8 @@ def render_home(message=None, error=None, files=None, result_summary=None):
     <section>
       <h2>从 JSON 重建</h2>
       <form method="post" action="/rebuild">
-        <label for="json-path">records_YYYYMMDD.json 路径</label>
-        <input id="json-path" name="json_path" type="text" placeholder="output/records_20260729.json">
+        <label for="json-path">records_YYYYMMDD_HHMMSS.json 路径</label>
+        <input id="json-path" name="json_path" type="text" placeholder="output/records_20260729_143022.json">
         <label for="rebuild-output">输出目录</label>
         <input id="rebuild-output" name="output_dir" type="text" placeholder="留空则输出到 JSON 所在目录">
         <label class="check"><input name="review" type="checkbox" checked> 同时生成审阅页面</label>
@@ -510,7 +506,7 @@ def _run_rebuild(form):
 
     json_path = form.get("json_path", "").strip()
     if not json_path:
-        return render_home(error="请选择 records_YYYYMMDD.json 文件路径。")
+        return render_home(error="请选择 records_YYYYMMDD_HHMMSS.json 文件路径。")
     output_dir = form.get("output_dir", "").strip()
     args = argparse.Namespace(json_path=json_path, output_dir=output_dir or None, review=form.get("review") == "on")
     exit_code = rebuild(args)
@@ -545,6 +541,32 @@ def _run_scan(form):
     )
     job_id = _start_job("扫描邮箱", _scan_job, args, output_dir)
     return {"job_id": job_id}
+
+
+def _save_simple_config(form):
+    email_account = form.get("EMAIL_ACCOUNT", "").strip()
+    email_password = form.get("EMAIL_PASSWORD", "").strip()
+    if not email_account:
+        return "请填写邮箱账号。"
+    existing = _read_env_values(_env_path())
+    updates = {"EMAIL_ACCOUNT": email_account}
+    if email_password:
+        updates["EMAIL_PASSWORD"] = email_password
+    elif not existing.get("EMAIL_PASSWORD"):
+        return "请填写邮箱授权码。"
+    imap_server = _infer_imap_server(email_account)
+    if imap_server:
+        updates["EMAIL_IMAP_SERVER"] = imap_server
+        updates["EMAIL_IMAP_PORT"] = "993"
+    _write_env_values(_env_path(), updates)
+    return None
+
+
+def _run_account(form):
+    error = _save_simple_config(form)
+    if error:
+        return render_home(error=error)
+    return render_home(message="账号已保存。以后只需要选择扫描范围。")
 
 
 def _scan_job(args, output_dir):
@@ -645,9 +667,29 @@ def _preflight_scan(output_dir):
     return None
 
 
+def _infer_imap_server(email_account):
+    lowered = email_account.lower()
+    if "@qq.com" in lowered:
+        return "imap.qq.com"
+    if "@163.com" in lowered:
+        return "imap.163.com"
+    if "@126.com" in lowered:
+        return "imap.126.com"
+    if "@gmail.com" in lowered:
+        return "imap.gmail.com"
+    if "@outlook.com" in lowered or "@hotmail.com" in lowered:
+        return "outlook.office365.com"
+    return ""
+
+
 def _friendly_error(exc):
     text = str(exc)
     lowered = text.lower()
+    if "help.mail.qq.com/detail/108/1023" in lowered or "account is abnormal" in lowered:
+        return (
+            "QQ 邮箱登录失败：请确认已在 QQ 邮箱设置中开启 IMAP/SMTP 服务，并使用 QQ 邮箱生成的授权码，"
+            "不是 QQ 登录密码；如果刚连续失败多次，请等待几分钟后再试。"
+        )
     if "authentication" in lowered or "login" in lowered or "password" in lowered:
         return "邮箱登录失败：请确认邮箱授权码正确，并且 IMAP 服务已开启。"
     if "imap" in lowered:
@@ -688,7 +730,7 @@ def _run_init():
 def _run_config(form):
     env_path = _env_path()
     updates = {}
-    plain_fields = ["EMAIL_ACCOUNT", "IMAP_SERVER", "LLM_BASE_URL", "LLM_MODEL"]
+    plain_fields = ["EMAIL_ACCOUNT", "EMAIL_IMAP_SERVER", "LLM_BASE_URL", "LLM_MODEL"]
     secret_fields = ["EMAIL_PASSWORD", "LLM_API_KEY"]
     for key in plain_fields:
         value = form.get(key, "").strip()
@@ -798,23 +840,128 @@ def _readiness_html(statuses):
 
 def _config_html():
     values = _read_env_values(_env_path())
+    account = values.get("EMAIL_ACCOUNT", "")
+    configured = bool(account and values.get("EMAIL_PASSWORD"))
+    account_html = _account_html(values, account, configured)
+    scan_html = _scan_html(configured)
+    advanced_html = _advanced_config_html(values, account)
     return f"""
     <section class="config">
-      <h2>邮箱配置</h2>
-      <div class="sub">在本机浏览器填写并保存到 .env。授权码和 API Key 留空表示保留原值，页面不会回显。</div>
-      <form method="post" action="/config">
+      <h2>账号</h2>
+      {account_html}
+    </section>
+    <section class="config">
+      <h2>开始扫描</h2>
+      {scan_html}
+    </section>
+    <section class="config">
+      {advanced_html}
+    </section>
+"""
+
+
+def _account_html(values, account, configured):
+    if configured:
+        return f"""
+      <div class="sub">已配置：{html.escape(account)}。授权码已保存，页面不会回显。</div>
+      <details>
+        <summary>更换邮箱</summary>
+        {_account_form(values, submit_label="保存账号")}
+      </details>
+"""
+    return (
+        '<div class="sub">第一次使用只需要填写邮箱账号和邮箱授权码，系统会自动选择 IMAP 服务器。</div>'
+        + _account_form(values, submit_label="保存账号")
+    )
+
+
+def _account_form(values, submit_label):
+    account = values.get("EMAIL_ACCOUNT", "")
+    return f"""
+      <form method="post" action="/account">
         <div class="config-grid">
           <div>
             <label for="cfg-email">邮箱账号</label>
-            <input id="cfg-email" name="EMAIL_ACCOUNT" type="text" value="{html.escape(values.get("EMAIL_ACCOUNT", ""))}">
+            <input id="cfg-email" name="EMAIL_ACCOUNT" type="text" value="{html.escape(account)}" placeholder="your_email@qq.com">
           </div>
           <div>
             <label for="cfg-password">邮箱授权码</label>
             <input id="cfg-password" name="EMAIL_PASSWORD" type="password" placeholder="{_secret_placeholder(values.get("EMAIL_PASSWORD"))}">
           </div>
+        </div>
+        <button type="submit">{html.escape(submit_label)}</button>
+      </form>
+"""
+
+
+def _scan_html(configured):
+    disabled = "" if configured else " disabled"
+    hint = "选择本次扫描范围。账号配置会复用，不需要每次填写。" if configured else "请先保存邮箱账号和授权码。"
+    return f"""
+      <div class="sub">{hint}</div>
+      <form method="post" action="/scan" data-background="true">
+        <div class="config-grid">
+          <div>
+            <label for="scan-count">最近邮件数量</label>
+            <input id="scan-count" name="count" type="number" min="1" value="60"{disabled}>
+          </div>
+          <div>
+            <label for="scan-output">输出目录</label>
+            <input id="scan-output" name="output_dir" type="text" value="output"{disabled}>
+          </div>
+        </div>
+        <input name="start" type="hidden" value="">
+        <input name="end" type="hidden" value="">
+        <label class="check"><input name="review" type="checkbox" checked{disabled}> 同时生成审阅页面</label>
+        <label class="check"><input name="no_llm" type="checkbox" checked{disabled}> 先用规则模式，减少不确定性</label>
+        <button type="submit"{disabled}>开始扫描</button>
+      </form>
+      <details>
+        <summary>按日期扫描</summary>
+        <form method="post" action="/scan" data-background="true">
+          <div class="config-grid">
+            <div>
+              <label for="scan-start">开始日期</label>
+              <input id="scan-start" name="start" type="text" placeholder="YYYY-MM-DD，可留空"{disabled}>
+            </div>
+            <div>
+              <label for="scan-end">结束日期</label>
+              <input id="scan-end" name="end" type="text" placeholder="YYYY-MM-DD，可留空"{disabled}>
+            </div>
+            <div>
+              <label for="scan-date-count">未填日期时扫描数量</label>
+              <input id="scan-date-count" name="count" type="number" min="1" value="60"{disabled}>
+            </div>
+            <div>
+              <label for="scan-date-output">输出目录</label>
+              <input id="scan-date-output" name="output_dir" type="text" value="output"{disabled}>
+            </div>
+          </div>
+          <label class="check"><input name="review" type="checkbox" checked{disabled}> 同时生成审阅页面</label>
+          <label class="check"><input name="no_llm" type="checkbox"{disabled}> 只用规则模式</label>
+          <button type="submit"{disabled}>开始日期扫描</button>
+        </form>
+      </details>
+"""
+
+
+def _advanced_config_html(values, account):
+    return f"""
+      <details>
+        <summary>高级配置</summary>
+        <form method="post" action="/config">
+          <div class="config-grid">
+            <div>
+              <label for="adv-email">邮箱账号</label>
+              <input id="adv-email" name="EMAIL_ACCOUNT" type="text" value="{html.escape(account)}">
+            </div>
+            <div>
+              <label for="adv-password">邮箱授权码</label>
+              <input id="adv-password" name="EMAIL_PASSWORD" type="password" placeholder="{_secret_placeholder(values.get("EMAIL_PASSWORD"))}">
+            </div>
           <div>
             <label for="cfg-imap">IMAP 服务器</label>
-            <input id="cfg-imap" name="IMAP_SERVER" type="text" value="{html.escape(values.get("IMAP_SERVER", ""))}" placeholder="可留空自动推断">
+            <input id="cfg-imap" name="EMAIL_IMAP_SERVER" type="text" value="{html.escape(values.get("EMAIL_IMAP_SERVER", ""))}" placeholder="{html.escape(_infer_imap_server(account) or "可留空自动推断")}">
           </div>
           <div>
             <label for="cfg-key">LLM API Key（可选）</label>
@@ -828,10 +975,10 @@ def _config_html():
             <label for="cfg-model">LLM Model（可选）</label>
             <input id="cfg-model" name="LLM_MODEL" type="text" value="{html.escape(values.get("LLM_MODEL", ""))}">
           </div>
-        </div>
-        <button type="submit">保存配置</button>
-      </form>
-    </section>
+          </div>
+          <button type="submit">保存高级配置</button>
+        </form>
+      </details>
 """
 
 

@@ -40,6 +40,7 @@ load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from common.utils import decode_str, get_email_config
 from common.email_parser import get_email_text
+from biztrip_agent.results import unique_output_path
 
 # Phase 2 LLM 模块。兼容脚本运行和安装后包导入。
 try:
@@ -86,6 +87,120 @@ def save_attachments(msg, email_idx, attach_dir=ATTACH_DIR):
                     f.write(raw)
                 saved.append(safe_name)
     return saved
+
+
+def infer_vendor(record):
+    """Infer supplier/platform from structured fields and email context."""
+    for key in ('酒店名称', '供应商', '平台', '服务商', '商家', '航空公司'):
+        value = record.get(key)
+        if value:
+            return str(value).strip()
+
+    text = ' '.join(
+        str(record.get(key, '') or '')
+        for key in ('发件人', '主题', '附件')
+    )
+    lowered = text.lower()
+
+    known = [
+        ('去哪儿网', ('qunar.com', '去哪儿')),
+        ('携程', ('ctrip.com', '携程')),
+        ('飞猪', ('fliggy.com', 'alitrip.com', '飞猪')),
+        ('12306', ('12306', 'rails.com.cn', '网上购票系统')),
+        ('高德', ('amap.com', '高德')),
+        ('滴滴', ('didi', 'xiaojukeji', '滴滴')),
+        ('T3出行', ('t3出行',)),
+        ('曹操出行', ('曹操出行',)),
+        ('如祺出行', ('如祺出行',)),
+        ('智慧发票', ('crestv.cn', '智慧发票')),
+        ('票根', ('txffp.com', '票根', '通行费发票')),
+        ('盒马', ('freshhema.com', '盒马')),
+        ('延长壳牌', ('cdshell.com', '延长壳牌')),
+    ]
+    for vendor, needles in known:
+        if any(needle.lower() in lowered for needle in needles):
+            return vendor
+
+    m = re.search(r'【([^】]{2,40})】开具的发票', text)
+    if m:
+        return m.group(1)
+
+    sender_name = str(record.get('发件人', '') or '').split('<', 1)[0].strip().strip('"')
+    return sender_name or '其他'
+
+
+def enrich_records_from_attachments(records, output_dir=OUTPUT_DIR):
+    """Backfill fields that can be recovered from archived attachments."""
+    attach_dir = os.path.join(str(output_dir), '附件')
+    for record in records:
+        if record.get('金额', '') not in ('', None):
+            continue
+        if infer_vendor(record) != '12306':
+            continue
+        text = _attachment_text(record.get('附件', ''), attach_dir)
+        amount = _fallback_12306_amount(text)
+        if amount:
+            record['金额'] = amount
+    return records
+
+
+def _attachment_text(attachment_value, attach_dir):
+    texts = []
+    for name in str(attachment_value or '').split(';'):
+        name = name.strip()
+        if not name:
+            continue
+        path = os.path.join(attach_dir, name)
+        if not os.path.exists(path):
+            continue
+        if name.lower().endswith('.pdf'):
+            with open(path, 'rb') as f:
+                texts.append(_pdf_text_from_bytes(f.read()))
+        elif name.lower().endswith('.zip'):
+            try:
+                import zipfile
+                with zipfile.ZipFile(path) as zf:
+                    for info in zf.infolist():
+                        if info.filename.lower().endswith('.pdf'):
+                            texts.append(_pdf_text_from_bytes(zf.read(info.filename)))
+            except Exception:
+                continue
+    return '\n'.join(texts)
+
+
+def _pdf_text_from_bytes(data):
+    try:
+        from PyPDF2 import PdfReader
+        reader = PdfReader(BytesIO(data))
+        return '\n'.join(page.extract_text() or '' for page in reader.pages)
+    except Exception:
+        return ''
+
+
+def _fallback_12306_amount(text):
+    amounts = []
+    for raw in re.findall(r'(?<!\d)(\d{1,4}\.\d{2})(?!\d)', text or ''):
+        try:
+            value = float(raw)
+        except ValueError:
+            continue
+        if 1 <= value <= 5000:
+            amounts.append(value)
+    return max(amounts) if amounts else ''
+
+
+def enrich_record(record, subject, sender, attachments):
+    """Add context and inferred supplier fields to one extracted record."""
+    record['附件'] = '; '.join(attachments) if attachments else ''
+    record['主题'] = subject
+    record['发件人'] = sender
+    vendor = infer_vendor(record)
+    if vendor and vendor != '其他':
+        if record.get('分类') in {'发票', '酒店'}:
+            record.setdefault('供应商', vendor)
+        else:
+            record.setdefault('平台', vendor)
+    return record
 
 
 # ========== 主流程 ==========
@@ -210,15 +325,10 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
                         record['出发地'] = pdf_info['出发地']
                     if pdf_info.get('目的地'):
                         record['目的地'] = pdf_info['目的地']
-                    record['附件'] = '; '.join(attachments) if attachments else ''
-                    record['主题'] = subject
-                    record['发件人'] = sender
-                    records.append(record)
+                    records.append(enrich_record(record, subject, sender, attachments))
                 continue
 
-        extract_result['附件'] = '; '.join(attachments) if attachments else ''
-        extract_result['主题'] = subject
-        extract_result['发件人'] = sender
+        extract_result = enrich_record(extract_result, subject, sender, attachments)
         records.append(extract_result)
 
         # 统计
@@ -236,6 +346,8 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
     if not records:
         print('\n未发现出差相关邮件')
         return
+
+    enrich_records_from_attachments(records, output_dir=output_dir)
 
     # ===== Step 4: 出差聚合 =====
     trips = aggregate_trips(records, use_llm=use_llm)
@@ -481,7 +593,7 @@ def _generate_excel(records, trips, total_amount, scan_label, output_dir=OUTPUT_
             i,
             r.get('日期', '') or '-',
             r.get('分类', ''),
-            r.get('酒店名称', '') or r.get('供应商', '') or r.get('平台', '') or '-',
+            infer_vendor(r),
             r.get('金额', '') if r.get('金额', '') != '' else '-',
             route or '-',
             r.get('方法', '') or '-',
@@ -515,7 +627,7 @@ def _generate_excel(records, trips, total_amount, scan_label, output_dir=OUTPUT_
 
     vendors = {}
     for r in records:
-        v = r.get('酒店名称', '') or r.get('供应商', '') or r.get('平台', '') or '其他'
+        v = infer_vendor(r)
         amt = r.get('金额', 0) or 0
         if v not in vendors:
             vendors[v] = {'count': 0, 'amount': 0}
@@ -533,11 +645,10 @@ def _generate_excel(records, trips, total_amount, scan_label, output_dir=OUTPUT_
             cell.border = thin_border
             cell.fill = rf
 
-    today = datetime.now().strftime('%Y%m%d')
     os.makedirs(output_dir, exist_ok=True)
-    xlsx_path = os.path.join(output_dir, f'差旅汇总_{today}.xlsx')
+    xlsx_path = unique_output_path(output_dir, '差旅汇总', '.xlsx')
     wb.save(xlsx_path)
-    return xlsx_path
+    return str(xlsx_path)
 
 
 if __name__ == '__main__':
