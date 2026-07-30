@@ -46,12 +46,13 @@ def test_web_home_contains_local_workflows():
     assert "高级扫描选项" in html
     assert "维护工具" in html
     assert "高级配置" in html
-    assert "LLM 增强" in html
+    assert "LLM 增强配置" in html
+    assert "接口地址" in html
+    assert "API Key" in html
+    assert "模型名称" in html
     assert "点击开始生成时自动调用" in html
     assert "没有单独对话窗口" in html
-    assert "更换 LLM Base URL" in html
-    assert "LLM Model" not in html
-    assert "deepseek-chat" not in html
+    assert "提供商" not in html
     assert "准备状态" in html
     assert "诊断信息" in html
     assert "records_YYYYMMDD_HHMMSS.json" in html
@@ -349,6 +350,29 @@ def test_config_form_defaults_llm_provider_when_key_is_added(monkeypatch, tmp_pa
     assert values["LLM_BASE_URL"] == "https://api.deepseek.com/v1"
     assert values["LLM_MODEL"] == "deepseek-chat"
     assert "sk-test" not in html
+
+
+def test_llm_config_can_be_saved_separately(monkeypatch, tmp_path):
+    env_path = tmp_path / ".env"
+    env_path.write_text("EMAIL_ACCOUNT=user@example.com\nEMAIL_PASSWORD=keep-me\n", encoding="utf-8")
+    monkeypatch.setattr("biztrip_agent.web._env_path", lambda: env_path)
+
+    html = _run_config(
+        {
+            "EMAIL_ACCOUNT": "",
+            "EMAIL_IMAP_SERVER": "",
+            "LLM_BASE_URL": "http://127.0.0.1:8000/v1",
+            "LLM_API_KEY": "sk-test",
+            "LLM_MODEL": "Qwen3.5-9B",
+        }
+    )
+
+    values = _read_env_values(env_path)
+    assert "配置已保存" in html
+    assert values["EMAIL_ACCOUNT"] == "user@example.com"
+    assert values["LLM_BASE_URL"] == "http://127.0.0.1:8000/v1"
+    assert values["LLM_API_KEY"] == "sk-test"
+    assert values["LLM_MODEL"] == "Qwen3.5-9B"
 
 
 def test_config_form_keeps_existing_custom_llm_provider(monkeypatch, tmp_path):
