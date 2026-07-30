@@ -75,27 +75,23 @@ pip install openai
 
 ---
 
-## 配置
+## 首次配置
 
-### 1. 复制配置模板
+启动 Web 工作台：
 
 ```bash
-cp .env.example .env
+biztrip web
 ```
 
-### 2. 编辑配置文件
+第一次使用时，页面会显示配置指引：
 
-打开 `.env`，至少填入邮箱配置：
+1. 打开邮箱设置，开启 IMAP/SMTP 服务
+2. 生成邮箱授权码或应用专用密码，不要使用登录密码
+3. 回到页面填写邮箱账号和授权码，点击“保存账号”
 
-```env
-# 邮箱账号
-EMAIL_ACCOUNT=your_email@example.com
+系统会按邮箱地址自动选择 IMAP 服务器，并把配置保存在本机 `.env` 文件中。普通用户不需要手动编辑 `.env`。
 
-# 邮箱授权码（不是登录密码！）
-EMAIL_PASSWORD=your_authorization_code
-```
-
-### 3. （可选）配置 LLM
+### （可选）配置 LLM
 
 如需 AI 增强功能，追加 LLM 配置：
 

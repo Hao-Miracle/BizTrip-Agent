@@ -10,6 +10,8 @@ from biztrip_agent.web import (
     _friendly_error,
     _infer_imap_server,
     _job_snapshot,
+    _onboarding_html,
+    _provider_setup_hint,
     _preflight_scan,
     _read_env_values,
     _result_summary,
@@ -45,6 +47,26 @@ def test_web_home_contains_local_workflows():
     assert "准备状态" in html
     assert "诊断信息" in html
     assert "records_YYYYMMDD_HHMMSS.json" in html
+
+
+def test_first_run_onboarding_guides_account_setup():
+    html = _onboarding_html({}, configured=False)
+
+    assert "第一次使用" in html
+    assert "开启 IMAP/SMTP 服务" in html
+    assert "生成邮箱授权码" in html
+    assert "不要使用登录密码" in html
+
+
+def test_first_run_onboarding_hides_after_configured():
+    assert _onboarding_html({"EMAIL_ACCOUNT": "user@qq.com"}, configured=True) == ""
+
+
+def test_provider_setup_hint_matches_common_email_domains():
+    assert "QQ 邮箱" in _provider_setup_hint("user@qq.com")
+    assert "网易邮箱" in _provider_setup_hint("user@163.com")
+    assert "Gmail" in _provider_setup_hint("user@gmail.com")
+    assert "常见邮箱" in _provider_setup_hint("user@example.com")
 
 
 def test_web_rejects_invalid_port():

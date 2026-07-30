@@ -260,6 +260,12 @@ def render_home(message=None, error=None, files=None, result_summary=None):
     .status.ok {{ border-color: #a8dab5; }}
     .status.warn {{ border-color: #fdd663; }}
     .status.bad {{ border-color: #f4b6b1; }}
+    .steps {{
+      margin: 10px 0 0;
+      padding-left: 22px;
+      color: var(--text);
+    }}
+    .steps li {{ margin: 6px 0; }}
     .secondary {{
       border-color: var(--line);
       background: #fff;
@@ -849,10 +855,12 @@ def _config_html():
     values = _read_env_values(_env_path())
     account = values.get("EMAIL_ACCOUNT", "")
     configured = bool(account and values.get("EMAIL_PASSWORD"))
+    onboarding_html = _onboarding_html(values, configured)
     account_html = _account_html(values, account, configured)
     scan_html = _scan_html(configured)
     advanced_html = _advanced_config_html(values, account)
     return f"""
+    {onboarding_html}
     <section class="config">
       <h2>账号</h2>
       {account_html}
@@ -867,6 +875,38 @@ def _config_html():
 """
 
 
+def _onboarding_html(values, configured):
+    if configured:
+        return ""
+    email = values.get("EMAIL_ACCOUNT", "")
+    provider_hint = _provider_setup_hint(email)
+    return f"""
+    <section class="config">
+      <h2>第一次使用</h2>
+      <div class="sub">先让邮箱允许本地工具读取发票邮件，再回到本页保存账号。</div>
+      <ol class="steps">
+        <li>打开邮箱设置，开启 IMAP/SMTP 服务。</li>
+        <li>生成邮箱授权码或应用专用密码，不要使用登录密码。</li>
+        <li>在下面填写邮箱账号和授权码，点击保存账号。</li>
+      </ol>
+      <div class="sub">{html.escape(provider_hint)}</div>
+    </section>
+"""
+
+
+def _provider_setup_hint(email_account):
+    lowered = email_account.lower()
+    if "@qq.com" in lowered:
+        return "QQ 邮箱：设置 -> 账号 -> POP3/IMAP/SMTP/Exchange/CardDAV/CalDAV 服务，开启 IMAP/SMTP 后生成授权码。"
+    if "@163.com" in lowered or "@126.com" in lowered:
+        return "网易邮箱：设置 -> POP3/SMTP/IMAP，开启 IMAP 服务后生成授权码。"
+    if "@gmail.com" in lowered:
+        return "Gmail：开启两步验证后，到账户安全里生成应用专用密码。"
+    if "@outlook.com" in lowered or "@hotmail.com" in lowered:
+        return "Outlook/Hotmail：到账户安全设置里生成应用密码；如果账号不支持应用密码，需要使用支持 IMAP 的授权方式。"
+    return "常见邮箱都需要先开启 IMAP，并使用授权码或应用专用密码。QQ、163、126、Gmail、Outlook 会自动选择服务器。"
+
+
 def _account_html(values, account, configured):
     if configured:
         return f"""
@@ -877,7 +917,7 @@ def _account_html(values, account, configured):
       </details>
 """
     return (
-        '<div class="sub">第一次使用只需要填写邮箱账号和邮箱授权码，系统会自动选择 IMAP 服务器。</div>'
+        '<div class="sub">保存后系统会自动选择 IMAP 服务器。授权码只保存在本机，页面不会回显。</div>'
         + _account_form(values, submit_label="保存账号")
     )
 
