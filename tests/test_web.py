@@ -42,7 +42,8 @@ def test_web_home_contains_local_workflows():
     assert "高级扫描选项" in html
     assert "维护工具" in html
     assert "高级配置" in html
-    assert "本地就绪检查" in html
+    assert "准备状态" in html
+    assert "诊断信息" in html
     assert "records_YYYYMMDD_HHMMSS.json" in html
 
 

@@ -812,14 +812,35 @@ def _readiness_html(statuses):
             f'<span>{html.escape(item["detail"])}</span>'
             "</div>"
         )
+    blocking = [item for item in statuses if item["state"] == "bad"]
+    missing_account = [item for item in statuses if item["label"] in {"邮箱账号", "邮箱授权码"} and item["state"] != "ok"]
+    if blocking:
+        title = "需要先安装运行环境"
+        detail = "当前电脑缺少必要组件。展开诊断信息，按提示处理。"
+        state = "bad"
+    elif missing_account:
+        title = "需要先保存邮箱账号"
+        detail = "填写邮箱账号和授权码后，就可以生成报销包。"
+        state = "warn"
+    else:
+        title = "可以开始生成报销包"
+        detail = "账号和本地环境已准备好。"
+        state = "ok"
     return (
         '<section class="readiness">'
-        "<h2>本地就绪检查</h2>"
+        "<h2>准备状态</h2>"
+        f'<div class="status {html.escape(state)}">'
+        f'<strong>{html.escape(title)}</strong>'
+        f'<span>{html.escape(detail)}</span>'
+        "</div>"
+        '<form method="post" action="/init">'
+        '<button class="secondary" type="submit">修复配置文件</button>'
+        "</form>"
+        "<details>"
+        "<summary>诊断信息</summary>"
         '<div class="sub">只显示是否已配置，不显示邮箱授权码或 API Key。</div>'
         f'<div class="status-grid">{"".join(rows)}</div>'
-        '<form method="post" action="/init">'
-        '<button class="secondary" type="submit">生成 .env 模板</button>'
-        "</form>"
+        "</details>"
         "</section>"
     )
 
