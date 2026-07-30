@@ -49,8 +49,9 @@ def test_web_home_contains_local_workflows():
     assert "LLM 增强" in html
     assert "点击开始生成时自动调用" in html
     assert "没有单独对话窗口" in html
-    assert "更换模型服务商" in html
-    assert "deepseek-chat" in html
+    assert "更换 LLM Base URL" in html
+    assert "LLM Model" not in html
+    assert "deepseek-chat" not in html
     assert "准备状态" in html
     assert "诊断信息" in html
     assert "records_YYYYMMDD_HHMMSS.json" in html
@@ -314,7 +315,6 @@ def test_config_form_saves_without_overwriting_blank_secrets(monkeypatch, tmp_pa
             "EMAIL_IMAP_SERVER": "imap.example.com",
             "LLM_API_KEY": "",
             "LLM_BASE_URL": "https://api.example.com/v1",
-            "LLM_MODEL": "example-chat",
         }
     )
 
@@ -340,7 +340,6 @@ def test_config_form_defaults_llm_provider_when_key_is_added(monkeypatch, tmp_pa
             "EMAIL_IMAP_SERVER": "",
             "LLM_API_KEY": "sk-test",
             "LLM_BASE_URL": "",
-            "LLM_MODEL": "",
         }
     )
 
@@ -371,7 +370,6 @@ def test_config_form_keeps_existing_custom_llm_provider(monkeypatch, tmp_path):
             "EMAIL_IMAP_SERVER": "",
             "LLM_API_KEY": "",
             "LLM_BASE_URL": "",
-            "LLM_MODEL": "",
         }
     )
 
