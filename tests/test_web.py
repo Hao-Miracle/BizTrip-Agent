@@ -35,9 +35,10 @@ def test_web_home_contains_local_workflows():
     assert 'action="/init"' in html
     assert 'action="/config"' in html
     assert "账号" in html
-    assert "开始扫描" in html
+    assert "生成报销包" in html
     assert "保存账号" in html
-    assert "按日期扫描" in html
+    assert "更多扫描选项" in html
+    assert "维护工具" in html
     assert "高级配置" in html
     assert "本地就绪检查" in html
     assert "records_YYYYMMDD_HHMMSS.json" in html

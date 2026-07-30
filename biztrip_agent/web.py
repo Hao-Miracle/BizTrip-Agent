@@ -276,6 +276,12 @@ def render_home(message=None, error=None, files=None, result_summary=None):
       grid-template-columns: repeat(2, minmax(220px, 1fr));
       gap: 12px;
     }}
+    .tools {{
+      grid-column: 1 / -1;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      padding: 16px 18px;
+    }}
     details {{
       grid-column: 1 / -1;
       margin-top: 10px;
@@ -309,26 +315,7 @@ def render_home(message=None, error=None, files=None, result_summary=None):
     </section>
     {readiness_html}
     {config_html}
-    <section>
-      <h2>生成 Demo</h2>
-      <form method="post" action="/demo">
-        <label for="demo-output">输出目录</label>
-        <input id="demo-output" name="output_dir" type="text" value="output">
-        <label class="check"><input name="review" type="checkbox" checked> 同时生成审阅页面</label>
-        <button type="submit">生成 Demo</button>
-      </form>
-    </section>
-    <section>
-      <h2>从 JSON 重建</h2>
-      <form method="post" action="/rebuild">
-        <label for="json-path">records_YYYYMMDD_HHMMSS.json 路径</label>
-        <input id="json-path" name="json_path" type="text" placeholder="output/records_20260729_143022.json">
-        <label for="rebuild-output">输出目录</label>
-        <input id="rebuild-output" name="output_dir" type="text" placeholder="留空则输出到 JSON 所在目录">
-        <label class="check"><input name="review" type="checkbox" checked> 同时生成审阅页面</label>
-        <button type="submit">重建报表</button>
-      </form>
-    </section>
+    {_tools_html()}
   </main>
   <script>
     const jobPanel = document.getElementById("job-panel");
@@ -749,7 +736,7 @@ def _latest_files(output_dir):
     output_dir = Path(output_dir)
     if not output_dir.exists():
         return []
-    names = ["*.xlsx", "review_*.html", "records_*.json"]
+    names = ["*.xlsx", "review_*.html"]
     files = []
     for pattern in names:
         files.extend(output_dir.glob(pattern))
@@ -805,7 +792,6 @@ def _summary_html(summary):
         f'<div class="result-metric"><strong>{int(summary.get("record_count") or 0)}</strong><span>记录数</span></div>'
         f'<div class="result-metric"><strong>{int(summary.get("trip_count") or 0)}</strong><span>行程数</span></div>'
         "</div>"
-        f'<div class="sub">JSON：{html.escape(str(summary.get("json_path") or ""))}</div>'
         "</section>"
     )
 
@@ -851,7 +837,7 @@ def _config_html():
       {account_html}
     </section>
     <section class="config">
-      <h2>开始扫描</h2>
+      <h2>生成报销包</h2>
       {scan_html}
     </section>
     <section class="config">
@@ -896,28 +882,27 @@ def _account_form(values, submit_label):
 
 def _scan_html(configured):
     disabled = "" if configured else " disabled"
-    hint = "选择本次扫描范围。账号配置会复用，不需要每次填写。" if configured else "请先保存邮箱账号和授权码。"
+    hint = "选择这次要报销的日期范围。留空时默认扫描最近 60 封邮件。" if configured else "请先保存邮箱账号和授权码。"
     return f"""
       <div class="sub">{hint}</div>
       <form method="post" action="/scan" data-background="true">
         <div class="config-grid">
           <div>
-            <label for="scan-count">最近邮件数量</label>
-            <input id="scan-count" name="count" type="number" min="1" value="60"{disabled}>
+            <label for="scan-start">开始日期</label>
+            <input id="scan-start" name="start" type="text" placeholder="YYYY-MM-DD，可留空"{disabled}>
           </div>
           <div>
-            <label for="scan-output">输出目录</label>
-            <input id="scan-output" name="output_dir" type="text" value="output"{disabled}>
+            <label for="scan-end">结束日期</label>
+            <input id="scan-end" name="end" type="text" placeholder="YYYY-MM-DD，可留空"{disabled}>
           </div>
         </div>
-        <input name="start" type="hidden" value="">
-        <input name="end" type="hidden" value="">
-        <label class="check"><input name="review" type="checkbox" checked{disabled}> 同时生成审阅页面</label>
-        <label class="check"><input name="no_llm" type="checkbox" checked{disabled}> 先用规则模式，减少不确定性</label>
-        <button type="submit"{disabled}>开始扫描</button>
+        <input name="count" type="hidden" value="60">
+        <input name="output_dir" type="hidden" value="output">
+        <input name="review" type="hidden" value="on">
+        <button type="submit"{disabled}>开始生成</button>
       </form>
       <details>
-        <summary>按日期扫描</summary>
+        <summary>更多扫描选项</summary>
         <form method="post" action="/scan" data-background="true">
           <div class="config-grid">
             <div>
@@ -929,7 +914,7 @@ def _scan_html(configured):
               <input id="scan-end" name="end" type="text" placeholder="YYYY-MM-DD，可留空"{disabled}>
             </div>
             <div>
-              <label for="scan-date-count">未填日期时扫描数量</label>
+              <label for="scan-date-count">未填日期时扫描最近邮件数量</label>
               <input id="scan-date-count" name="count" type="number" min="1" value="60"{disabled}>
             </div>
             <div>
@@ -939,9 +924,37 @@ def _scan_html(configured):
           </div>
           <label class="check"><input name="review" type="checkbox" checked{disabled}> 同时生成审阅页面</label>
           <label class="check"><input name="no_llm" type="checkbox"{disabled}> 只用规则模式</label>
-          <button type="submit"{disabled}>开始日期扫描</button>
+          <button type="submit"{disabled}>开始生成</button>
         </form>
       </details>
+"""
+
+
+def _tools_html():
+    return """
+    <section class="tools">
+      <details>
+        <summary>维护工具</summary>
+        <div class="config-grid">
+          <form method="post" action="/demo">
+            <h2>生成 Demo</h2>
+            <label for="demo-output">输出目录</label>
+            <input id="demo-output" name="output_dir" type="text" value="output">
+            <label class="check"><input name="review" type="checkbox" checked> 同时生成审阅页面</label>
+            <button type="submit">生成 Demo</button>
+          </form>
+          <form method="post" action="/rebuild">
+            <h2>从 JSON 重建</h2>
+            <label for="json-path">records_YYYYMMDD_HHMMSS.json 路径</label>
+            <input id="json-path" name="json_path" type="text" placeholder="output/records_20260729_143022.json">
+            <label for="rebuild-output">输出目录</label>
+            <input id="rebuild-output" name="output_dir" type="text" placeholder="留空则输出到 JSON 所在目录">
+            <label class="check"><input name="review" type="checkbox" checked> 同时生成审阅页面</label>
+            <button type="submit">重建报表</button>
+          </form>
+        </div>
+      </details>
+    </section>
 """
 
 
