@@ -21,6 +21,7 @@ from biztrip_agent.web import (
     _run_demo,
     _run_scan,
     _start_job,
+    _using_temporary_env,
     _validate_scan_inputs,
     _write_env_values,
     readiness_status,
@@ -55,7 +56,11 @@ def test_web_env_path_can_use_temporary_first_run_config(monkeypatch, tmp_path):
     monkeypatch.setenv("BIZTRIP_ENV_PATH", str(env_path))
 
     assert _env_path() == env_path
-    assert "第一次使用" in render_home()
+    html = render_home()
+    assert _using_temporary_env() is True
+    assert "第一次使用" in html
+    assert "最近结果" not in html
+    assert "生成文件" not in html
 
 
 def test_first_run_onboarding_guides_account_setup():
