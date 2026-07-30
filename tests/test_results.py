@@ -5,7 +5,7 @@ from openpyxl import load_workbook
 
 from biztrip_agent.cli import main
 from biztrip_agent.results import load_results_json, write_results_json
-from phase2.agent_report import enrich_records_from_attachments, infer_vendor
+from phase2.agent_report import _build_search_query, enrich_records_from_attachments, infer_vendor
 
 
 def test_write_results_json_persists_summary_and_records(tmp_path):
@@ -145,6 +145,22 @@ def test_enrich_records_backfills_12306_amount_from_archived_zip(tmp_path, monke
     enrich_records_from_attachments(records, output_dir=output_dir)
 
     assert records[0]["金额"] == 149.0
+
+
+def test_search_query_includes_end_date():
+    search_cmd, scan_label, limit_recent = _build_search_query("2026-07-01", "2026-07-30", 60)
+
+    assert search_cmd == "SINCE 01-Jul-2026 BEFORE 31-Jul-2026"
+    assert scan_label == "2026-07-01~2026-07-30"
+    assert limit_recent is False
+
+
+def test_search_query_limits_recent_only_without_dates():
+    search_cmd, scan_label, limit_recent = _build_search_query("", "", 60)
+
+    assert search_cmd == "ALL"
+    assert scan_label == "最近60封"
+    assert limit_recent is True
 
 
 def test_wizard_rebuilds_from_json(tmp_path, monkeypatch):

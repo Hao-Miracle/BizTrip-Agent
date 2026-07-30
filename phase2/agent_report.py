@@ -248,28 +248,7 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
         start = start or ''
         end = end or ''
 
-    if start or end:
-        parts = []
-        display = []
-        if start:
-            try:
-                dt = datetime.strptime(start, '%Y-%m-%d')
-                parts.append(f'SINCE {dt.strftime("%d-%b-%Y")}')
-                display.append(start)
-            except ValueError:
-                print('  ⚠️ 开始日期格式错误，已忽略')
-        if end:
-            try:
-                dt = datetime.strptime(end, '%Y-%m-%d')
-                parts.append(f'BEFORE {(dt + timedelta(days=1)).strftime("%d-%b-%Y")}')
-                display.append(end)
-            except ValueError:
-                print('  ⚠️ 结束日期格式错误，已忽略')
-        search_cmd = ' '.join(parts) if parts else 'ALL'
-        scan_label = '~'.join(display) if display else '全部'
-    else:
-        search_cmd = 'ALL'
-        scan_label = f'最近{count}封'
+    search_cmd, scan_label, limit_recent = _build_search_query(start, end, count)
 
     status, data = conn.search(None, search_cmd)
     if status != 'OK' or not data[0]:
@@ -278,7 +257,7 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
         return
 
     mail_ids = data[0].split()
-    if not start and not end:
+    if limit_recent:
         mail_ids = mail_ids[-count:]
 
     print(f'\n📬 扫描范围: {scan_label} ({len(mail_ids)} 封邮件)')
@@ -387,6 +366,28 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
         'review_path': str(review_path) if review_path else None,
         'results_path': str(results_path),
     }
+
+
+def _build_search_query(start, end, count):
+    parts = []
+    display = []
+    if start:
+        try:
+            dt = datetime.strptime(start, '%Y-%m-%d')
+            parts.append(f'SINCE {dt.strftime("%d-%b-%Y")}')
+            display.append(start)
+        except ValueError:
+            print('  ⚠️ 开始日期格式错误，已忽略')
+    if end:
+        try:
+            dt = datetime.strptime(end, '%Y-%m-%d')
+            parts.append(f'BEFORE {(dt + timedelta(days=1)).strftime("%d-%b-%Y")}')
+            display.append(end)
+        except ValueError:
+            print('  ⚠️ 结束日期格式错误，已忽略')
+    if parts:
+        return ' '.join(parts), '~'.join(display), False
+    return 'ALL', f'最近{count}封', True
 
 
 def _get_pdf_attachments_raw(msg):
