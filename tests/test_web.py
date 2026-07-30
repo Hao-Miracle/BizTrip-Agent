@@ -46,6 +46,8 @@ def test_web_home_contains_local_workflows():
     assert "高级扫描选项" in html
     assert "维护工具" in html
     assert "高级配置" in html
+    assert "LLM 增强" in html
+    assert "deepseek-chat" in html
     assert "准备状态" in html
     assert "诊断信息" in html
     assert "records_YYYYMMDD_HHMMSS.json" in html
@@ -321,6 +323,30 @@ def test_config_form_saves_without_overwriting_blank_secrets(monkeypatch, tmp_pa
     assert values["EMAIL_IMAP_SERVER"] == "imap.example.com"
     assert "keep-me" not in html
     assert "keep-key" not in html
+
+
+def test_config_form_defaults_llm_provider_when_key_is_added(monkeypatch, tmp_path):
+    env_path = tmp_path / ".env"
+    env_path.write_text("EMAIL_ACCOUNT=user@example.com\nEMAIL_PASSWORD=keep-me\n", encoding="utf-8")
+    monkeypatch.setattr("biztrip_agent.web._env_path", lambda: env_path)
+
+    html = _run_config(
+        {
+            "EMAIL_ACCOUNT": "user@example.com",
+            "EMAIL_PASSWORD": "",
+            "EMAIL_IMAP_SERVER": "",
+            "LLM_API_KEY": "sk-test",
+            "LLM_BASE_URL": "",
+            "LLM_MODEL": "",
+        }
+    )
+
+    values = _read_env_values(env_path)
+    assert "配置已保存" in html
+    assert values["LLM_API_KEY"] == "sk-test"
+    assert values["LLM_BASE_URL"] == "https://api.deepseek.com/v1"
+    assert values["LLM_MODEL"] == "deepseek-chat"
+    assert "sk-test" not in html
 
 
 def test_web_home_supports_head_request():

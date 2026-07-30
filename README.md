@@ -226,7 +226,9 @@ biztrip rebuild output/records_20260705_143022.json --review
 
 ## 🧠 LLM 增强（可选）
 
-Agent 模式支持**任意兼容 OpenAI 协议的服务商**（含本地模型），三行配置即可切换：
+默认不需要配置 LLM，规则模式可以完整生成报销包。想增强复杂邮件识别时，在 Web 页面展开“高级配置”，填写 `LLM API Key` 即可；Base URL 和 Model 留空时默认使用 DeepSeek。
+
+高级用户也可以手动配置任意兼容 OpenAI 协议的服务商（含本地模型）：
 
 ```env
 # DeepSeek（推荐，中文好）
