@@ -106,10 +106,10 @@ brew install python
 ### 2. 一条命令安装并启动
 
 ```bash
-git clone https://github.com/Hao-Miracle/BizTrip-Agent.git && cd BizTrip-Agent && python3 -m venv .venv && .venv/bin/python -m pip install -e . && .venv/bin/biztrip web
+git clone https://github.com/Hao-Miracle/BizTrip-Agent.git && cd BizTrip-Agent && python3 start.py
 ```
 
-这条命令会自动安装项目需要的 Python 依赖。它不会替你安装 Python 本身，也不会替你生成邮箱授权码。
+这条命令会自动创建本地运行环境并安装项目依赖。它不会替你安装 Python 本身，也不会替你生成邮箱授权码。
 
 ### 3. 首次配置邮箱
 
@@ -126,7 +126,7 @@ Web 页面打开后，按“第一次使用”提示操作：
 ### 4. 以后再次启动
 
 ```bash
-cd BizTrip-Agent && .venv/bin/biztrip web
+cd BizTrip-Agent && python3 start.py
 ```
 
 ### 5. 先跑 Demo（不需要邮箱）

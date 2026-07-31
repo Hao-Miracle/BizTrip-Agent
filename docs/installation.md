@@ -45,10 +45,10 @@ brew install python
 ### 一条命令安装并启动
 
 ```bash
-git clone https://github.com/Hao-Miracle/BizTrip-Agent.git && cd BizTrip-Agent && python3 -m venv .venv && .venv/bin/python -m pip install -e . && .venv/bin/biztrip web
+git clone https://github.com/Hao-Miracle/BizTrip-Agent.git && cd BizTrip-Agent && python3 start.py
 ```
 
-这条命令会自动安装项目需要的 Python 依赖，包括 `python-dotenv`、`PyPDF2`、`openpyxl` 和本地 `biztrip` 命令。它不会自动安装 Python 本身，也不会替你开启邮箱 IMAP 或生成邮箱授权码。
+这条命令会自动创建本地运行环境并安装项目需要的 Python 依赖，包括 `python-dotenv`、`PyPDF2`、`openpyxl` 和本地 `biztrip` 命令。它不会自动安装 Python 本身，也不会替你开启邮箱 IMAP 或生成邮箱授权码。
 
 ### 下载 ZIP
 
@@ -81,7 +81,7 @@ python3 -m venv .venv
 启动 Web 工作台：
 
 ```bash
-biztrip web
+python3 start.py
 ```
 
 第一次使用时，页面会显示配置指引：
