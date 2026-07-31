@@ -110,6 +110,7 @@ class BizTripWebHandler(BaseHTTPRequestHandler):
 
 def render_home(message=None, error=None, files=None, result_summary=None):
     """Render the local web UI."""
+    account_ready = _account_ready()
     message_html = ""
     if message:
         message_html = f'<div class="notice ok">{html.escape(message)}</div>'
@@ -118,8 +119,9 @@ def render_home(message=None, error=None, files=None, result_summary=None):
     files_html = _files_html(files or [])
     readiness_html = _readiness_html(readiness_status())
     config_html = _config_html()
-    recent_html = "" if _using_temporary_env() else _recent_results_html()
-    summary_html = _summary_html(result_summary) if result_summary or not _using_temporary_env() else ""
+    show_saved_results = account_ready and not _using_temporary_env()
+    recent_html = _recent_results_html() if show_saved_results else ""
+    summary_html = _summary_html(result_summary) if result_summary or show_saved_results else ""
     return f"""<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -439,6 +441,11 @@ def _env_path():
 
 def _using_temporary_env():
     return bool(os.getenv("BIZTRIP_ENV_PATH", "").strip())
+
+
+def _account_ready():
+    values = _read_env_values(_env_path())
+    return bool(values.get("EMAIL_ACCOUNT") and values.get("EMAIL_PASSWORD"))
 
 
 def _read_env_flags(env_path):
