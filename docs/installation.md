@@ -42,6 +42,16 @@ brew install python
 
 ## 安装步骤
 
+### Windows 一键测试版
+
+Windows 测试人员优先使用一键版，无需安装 Python 和 Git：
+
+1. 从 GitHub Actions 的 **Windows One-Click Build** 下载 `BizTrip-Agent-Windows` 构建产物
+2. 解压后双击 `BizTrip-Agent-Windows.exe`
+3. 浏览器自动打开后，按页面指引配置邮箱并开始测试
+
+详细步骤见 [Windows 一键测试版](windows-one-click.md)。
+
 ### 一条命令安装并启动
 
 ```bash

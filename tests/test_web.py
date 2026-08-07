@@ -18,6 +18,7 @@ from biztrip_agent.web import (
     _result_summary,
     _run_account,
     _run_config,
+    _shutdown_html,
     _run_demo,
     _run_scan,
     _summary_html,
@@ -57,6 +58,25 @@ def test_web_home_contains_local_workflows(monkeypatch, tmp_path):
     assert "准备状态" in html
     assert "诊断信息" in html
     assert "records_YYYYMMDD_HHMMSS.json" in html
+    assert "打开报销文件夹" in html
+    assert "安全停止程序" in html
+
+
+def test_windows_output_directory_is_used_in_forms(monkeypatch, tmp_path):
+    output_dir = tmp_path / "Documents" / "BizTrip Agent"
+    monkeypatch.setenv("BIZTRIP_OUTPUT_DIR", str(output_dir))
+    monkeypatch.setenv("BIZTRIP_ENV_PATH", str(tmp_path / ".env"))
+
+    html = render_home()
+
+    assert str(output_dir) in html
+
+
+def test_shutdown_page_explains_how_to_restart():
+    html = _shutdown_html()
+
+    assert "已安全停止" in html
+    assert "BizTrip-Agent-Windows.exe" in html
 
 
 def test_web_env_path_can_use_temporary_first_run_config(monkeypatch, tmp_path):

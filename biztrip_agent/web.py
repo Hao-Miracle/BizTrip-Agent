@@ -6,6 +6,7 @@ import importlib.util
 import json
 import os
 import shutil
+import subprocess
 import sys
 import threading
 import time
@@ -82,6 +83,13 @@ class BizTripWebHandler(BaseHTTPRequestHandler):
             return
         if self.path == "/config":
             self._send_html(_run_config(form))
+            return
+        if self.path == "/open-output":
+            self._send_html(_run_open_output())
+            return
+        if self.path == "/shutdown":
+            self._send_html(_shutdown_html())
+            threading.Thread(target=self.server.shutdown, daemon=True).start()
             return
         self.send_error(404)
 
@@ -377,8 +385,7 @@ def render_home(message=None, error=None, files=None, result_summary=None):
 
 def readiness_status(project_dir=None):
     """Return local readiness flags without exposing secret values."""
-    project_dir = Path(project_dir) if project_dir else Path(__file__).resolve().parents[1]
-    env_path = project_dir / ".env"
+    env_path = Path(project_dir) / ".env" if project_dir else _env_path()
     env_values = _read_env_flags(env_path)
     return [
         {
@@ -441,7 +448,7 @@ def _env_path():
 
 
 def _using_temporary_env():
-    return bool(os.getenv("BIZTRIP_ENV_PATH", "").strip())
+    return bool(os.getenv("BIZTRIP_ENV_PATH", "").strip() and not os.getenv("BIZTRIP_DATA_DIR", "").strip())
 
 
 def _account_ready():
@@ -761,6 +768,31 @@ def _run_config(form):
     return render_home(message="配置已保存。密码和 API Key 不会在页面显示。")
 
 
+def _default_output_dir():
+    return Path(os.getenv("BIZTRIP_OUTPUT_DIR") or "output")
+
+
+def _run_open_output():
+    output_dir = _default_output_dir().expanduser().resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        if os.name == "nt":
+            os.startfile(str(output_dir))
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", str(output_dir)])
+        else:
+            subprocess.Popen(["xdg-open", str(output_dir)])
+    except (OSError, subprocess.SubprocessError) as exc:
+        return render_home(error=f"无法打开报销文件夹：{exc}")
+    return render_home(message=f"已打开报销文件夹：{output_dir}")
+
+
+def _shutdown_html():
+    return """<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>BizTrip Agent 已停止</title></head>
+<body style="font-family:Segoe UI,Microsoft YaHei,sans-serif;padding:40px;color:#202124">
+<h1>BizTrip Agent 已安全停止</h1><p>现在可以关闭这个页面。再次使用时，双击 BizTrip-Agent-Windows.exe。</p></body></html>"""
+
+
 def _latest_files(output_dir):
     output_dir = Path(output_dir)
     if not output_dir.exists():
@@ -814,7 +846,7 @@ def _files_html(files):
 
 
 def _summary_html(summary):
-    summary = summary or _result_summary("output")
+    summary = summary or _result_summary(_default_output_dir())
     if not summary:
         return ""
     status = summary.get("submission_status")
@@ -846,7 +878,7 @@ def _summary_html(summary):
 
 
 def _recent_results_html():
-    files = _latest_files("output")
+    files = _latest_files(_default_output_dir())
     if not files:
         return ""
     return _files_html(files)
@@ -999,6 +1031,7 @@ def _account_form(values, submit_label):
 
 def _scan_html(configured):
     disabled = "" if configured else " disabled"
+    output_dir = html.escape(str(_default_output_dir()))
     hint = "填写这次要报销的时间范围，系统会生成 Excel 和审阅页。" if configured else "请先保存邮箱账号和授权码。"
     return f"""
       <div class="sub">{hint}</div>
@@ -1014,7 +1047,7 @@ def _scan_html(configured):
           </div>
         </div>
         <input name="count" type="hidden" value="60">
-        <input name="output_dir" type="hidden" value="output">
+        <input name="output_dir" type="hidden" value="{output_dir}">
         <input name="review" type="hidden" value="on">
         <button type="submit"{disabled}>开始生成</button>
       </form>
@@ -1036,7 +1069,7 @@ def _scan_html(configured):
             </div>
             <div>
               <label for="scan-date-output">输出目录</label>
-              <input id="scan-date-output" name="output_dir" type="text" value="output"{disabled}>
+              <input id="scan-date-output" name="output_dir" type="text" value="{output_dir}"{disabled}>
             </div>
           </div>
           <label class="check"><input name="review" type="checkbox" checked{disabled}> 同时生成审阅页面</label>
@@ -1077,7 +1110,8 @@ def _llm_config_html(values):
 
 
 def _tools_html():
-    return """
+    output_dir = html.escape(str(_default_output_dir()))
+    return f"""
     <section class="tools">
       <details>
         <summary>维护工具</summary>
@@ -1085,9 +1119,19 @@ def _tools_html():
           <form method="post" action="/demo">
             <h2>生成 Demo</h2>
             <label for="demo-output">输出目录</label>
-            <input id="demo-output" name="output_dir" type="text" value="output">
+            <input id="demo-output" name="output_dir" type="text" value="{output_dir}">
             <label class="check"><input name="review" type="checkbox" checked> 同时生成审阅页面</label>
             <button type="submit">生成 Demo</button>
+          </form>
+          <form method="post" action="/open-output">
+            <h2>报销文件</h2>
+            <div class="sub">Excel、审阅报告和凭证原件保存在这里。</div>
+            <button type="submit">打开报销文件夹</button>
+          </form>
+          <form method="post" action="/shutdown">
+            <h2>停止程序</h2>
+            <div class="sub">完成测试后安全停止本地服务。</div>
+            <button type="submit">安全停止程序</button>
           </form>
           <form method="post" action="/rebuild">
             <h2>从 JSON 重建</h2>

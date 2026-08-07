@@ -11,7 +11,8 @@ from pathlib import Path
 
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
-OUTPUT_DIR = PROJECT_DIR / "output"
+DATA_DIR = Path(os.getenv("BIZTRIP_DATA_DIR") or PROJECT_DIR)
+OUTPUT_DIR = Path(os.getenv("BIZTRIP_OUTPUT_DIR") or DATA_DIR / "output")
 
 
 def main(argv=None):
@@ -238,7 +239,7 @@ def check():
         if required and not available:
             ok = False
 
-    env_path = PROJECT_DIR / ".env"
+    env_path = Path(os.getenv("BIZTRIP_ENV_PATH") or DATA_DIR / ".env")
     if env_path.exists():
         print(".env: found")
     else:
@@ -249,8 +250,8 @@ def check():
 
 def init_config():
     """Create a starter .env file without reading any secrets."""
-    env_path = PROJECT_DIR / ".env"
-    example_path = PROJECT_DIR / ".env.example"
+    env_path = Path(os.getenv("BIZTRIP_ENV_PATH") or DATA_DIR / ".env")
+    example_path = env_path.parent / ".env.example"
     if env_path.exists():
         print(f".env already exists: {env_path}")
         return 0

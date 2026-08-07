@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ### 新增
 
+- **Windows 一键测试版** — GitHub Actions 自动生成无需 Python、Git 或命令行的单文件 EXE
+- **Windows 本地持久化** — 配置保存在 `%LOCALAPPDATA%\BizTripAgent`，报销文件保存在“文档\BizTrip Agent”
+- **本地程序控制** — Web 页面可以打开报销文件夹并安全停止程序
 - **报销包验收结论** — Web 首页和审阅页显示“可以提交”或“暂不建议提交”
 - **完整性检查** — 检查金额、日期、供应商、原件和行程归属
 - **重复与冲突检查** — 检测重复原件、重复订单号/发票号及同一单号数据冲突

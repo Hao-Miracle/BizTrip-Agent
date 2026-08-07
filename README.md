@@ -90,6 +90,16 @@
 
 ## 🚀 快速开始
 
+### Windows 一键测试版
+
+Windows 用户可以直接下载 GitHub Actions 生成的 `BizTrip-Agent-Windows.exe`，双击后自动打开本地网页，不需要安装 Python、Git 或使用 PowerShell。
+
+- 配置和日志保存在 `%LOCALAPPDATA%\BizTripAgent`
+- 报销文件保存在“文档\BizTrip Agent”
+- 页面提供“打开报销文件夹”和“安全停止程序”
+
+下载和使用步骤见 [Windows 一键测试版](docs/windows-one-click.md)。当前测试版未签名，Windows SmartScreen 可能要求用户确认运行。
+
 ### 1. 先确认有 Python
 
 ```bash
