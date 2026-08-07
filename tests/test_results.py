@@ -33,6 +33,7 @@ def test_write_results_json_persists_summary_and_records(tmp_path):
         "2026-07-01~2026-07-29",
         xlsx_path=tmp_path / "report.xlsx",
         review_path=tmp_path / "review.html",
+        agent_task={"schema_version": "biztrip.agent-task.v1", "status": "needs_user_input"},
     )
 
     assert path.name.startswith("records_")
@@ -48,6 +49,7 @@ def test_write_results_json_persists_summary_and_records(tmp_path):
     assert payload["summary"]["affected_count"] == 2
     assert payload["validation"]["issue_count"] > 0
     assert payload["records"][0]["平台"] == "去哪儿网"
+    assert payload["agent_task"]["status"] == "needs_user_input"
     assert payload["trips"][0]["destination"] == "深圳"
 
     loaded = load_results_json(path)

@@ -330,7 +330,16 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
     # ===== Step 4: 出差聚合 =====
     trips = aggregate_trips(records, use_llm=use_llm)
 
-    # ===== Step 5: 生成 Excel =====
+    # ===== Step 5: 建立可追溯的 Agent 任务状态 =====
+    from biztrip_agent.agent_task import build_agent_task
+    agent_task = build_agent_task(
+        records,
+        trips,
+        goal=f'整理并核验 {scan_label} 的差旅报销材料',
+        use_llm=use_llm,
+    )
+
+    # ===== Step 6: 生成 Excel =====
     total_amount = sum(r.get('金额', 0) or 0 for r in records)
     xlsx_path = _generate_excel(records, trips, total_amount, scan_label, output_dir=output_dir, use_llm=use_llm)
     review_path = None
@@ -338,7 +347,15 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
         from biztrip_agent.review import generate_review_html
         review_path = generate_review_html(records, trips, output_dir, scan_label, excel_path=xlsx_path)
     from biztrip_agent.results import write_results_json
-    results_path = write_results_json(records, trips, output_dir, scan_label, xlsx_path=xlsx_path, review_path=review_path)
+    results_path = write_results_json(
+        records,
+        trips,
+        output_dir,
+        scan_label,
+        xlsx_path=xlsx_path,
+        review_path=review_path,
+        agent_task=agent_task,
+    )
 
     # ===== 打印结果 =====
     print(f'\n{"=" * 60}')
@@ -364,6 +381,7 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
         'xlsx_path': xlsx_path,
         'review_path': str(review_path) if review_path else None,
         'results_path': str(results_path),
+        'agent_task': agent_task,
     }
 
 

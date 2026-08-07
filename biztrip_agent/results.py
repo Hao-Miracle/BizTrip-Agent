@@ -27,7 +27,15 @@ def unique_output_path(directory, stem, suffix):
         index += 1
 
 
-def write_results_json(records, trips, output_dir, scan_label, xlsx_path=None, review_path=None):
+def write_results_json(
+    records,
+    trips,
+    output_dir,
+    scan_label,
+    xlsx_path=None,
+    review_path=None,
+    agent_task=None,
+):
     """Write scan results to a JSON file and return its path."""
     from biztrip_agent.validation import validate_reimbursement
 
@@ -58,6 +66,7 @@ def write_results_json(records, trips, output_dir, scan_label, xlsx_path=None, r
         "records": records,
         "trips": trips,
         "validation": validation,
+        "agent_task": agent_task or {},
     }
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     return path
