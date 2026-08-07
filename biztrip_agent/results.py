@@ -29,9 +29,12 @@ def unique_output_path(directory, stem, suffix):
 
 def write_results_json(records, trips, output_dir, scan_label, xlsx_path=None, review_path=None):
     """Write scan results to a JSON file and return its path."""
+    from biztrip_agent.validation import validate_reimbursement
+
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     total = sum(record.get("金额", 0) or 0 for record in records)
+    validation = validate_reimbursement(records, trips)
     path = unique_output_path(output_dir, "records", ".json")
 
     payload = {
@@ -42,6 +45,11 @@ def write_results_json(records, trips, output_dir, scan_label, xlsx_path=None, r
             "record_count": len(records),
             "trip_count": len(trips),
             "total_amount": total,
+            "submission_status": validation["status"],
+            "can_submit": validation["can_submit"],
+            "complete_count": validation["complete_count"],
+            "affected_count": validation["affected_count"],
+            "issue_count": validation["issue_count"],
         },
         "files": {
             "excel": str(xlsx_path) if xlsx_path else "",
@@ -49,6 +57,7 @@ def write_results_json(records, trips, output_dir, scan_label, xlsx_path=None, r
         },
         "records": records,
         "trips": trips,
+        "validation": validation,
     }
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     return path

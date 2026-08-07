@@ -204,6 +204,7 @@ def render_home(message=None, error=None, files=None, result_summary=None):
     }}
     .ok {{ border-color: #a8dab5; color: var(--green); }}
     .bad {{ border-color: #f4b6b1; color: var(--red); }}
+    .notice.warn {{ border-color: #fdd663; }}
     .files {{
       grid-column: 1 / -1;
       background: var(--panel);
@@ -784,6 +785,11 @@ def _result_summary(output_dir):
         "record_count": summary.get("record_count", 0),
         "trip_count": summary.get("trip_count", 0),
         "total_amount": summary.get("total_amount", 0),
+        "submission_status": summary.get("submission_status", "unknown"),
+        "can_submit": summary.get("can_submit"),
+        "complete_count": summary.get("complete_count", 0),
+        "affected_count": summary.get("affected_count", 0),
+        "issue_count": summary.get("issue_count", 0),
         "scan_label": payload.get("scan_label") or "最近结果",
         "json_path": str(records),
     }
@@ -811,14 +817,29 @@ def _summary_html(summary):
     summary = summary or _result_summary("output")
     if not summary:
         return ""
+    status = summary.get("submission_status")
+    if status == "ready":
+        verdict = '<div class="notice ok"><strong>可以提交</strong><br>所有记录均通过完整性检查。</div>'
+    elif status == "needs_review":
+        affected = int(summary.get("affected_count") or 0)
+        issues = int(summary.get("issue_count") or 0)
+        verdict = (
+            '<div class="notice bad"><strong>暂不建议提交</strong><br>'
+            f'{affected} 条记录需要处理，共发现 {issues} 个问题。请先打开审阅报告。</div>'
+        )
+    elif status == "empty":
+        verdict = '<div class="notice warn"><strong>没有可提交的记录</strong><br>请检查查询时间范围。</div>'
+    else:
+        verdict = '<div class="notice warn">这是旧版生成结果，请重新生成后查看完整性结论。</div>'
     return (
         '<section class="results">'
         "<h2>最近结果</h2>"
         f'<div class="sub">{html.escape(str(summary.get("scan_label") or "最近结果"))}</div>'
+        f'{verdict}'
         '<div class="result-grid">'
-        f'<div class="result-metric"><strong>¥ {float(summary.get("total_amount") or 0):,.2f}</strong><span>总金额</span></div>'
+        f'<div class="result-metric"><strong>¥ {float(summary.get("total_amount") or 0):,.2f}</strong><span>已识别金额</span></div>'
         f'<div class="result-metric"><strong>{int(summary.get("record_count") or 0)}</strong><span>记录数</span></div>'
-        f'<div class="result-metric"><strong>{int(summary.get("trip_count") or 0)}</strong><span>行程数</span></div>'
+        f'<div class="result-metric"><strong>{int(summary.get("affected_count") or 0)}</strong><span>待处理记录</span></div>'
         "</div>"
         "</section>"
     )

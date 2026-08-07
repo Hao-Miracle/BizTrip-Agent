@@ -5,7 +5,7 @@ from openpyxl import load_workbook
 
 from biztrip_agent.cli import main
 from biztrip_agent.results import load_results_json, write_results_json
-from phase2.agent_report import _build_search_query, enrich_records_from_attachments, infer_vendor
+from phase2.agent_report import _attachments_for_pdf, _build_search_query, enrich_records_from_attachments, infer_vendor
 
 
 def test_write_results_json_persists_summary_and_records(tmp_path):
@@ -43,6 +43,10 @@ def test_write_results_json_persists_summary_and_records(tmp_path):
     assert payload["summary"]["record_count"] == 2
     assert payload["summary"]["trip_count"] == 1
     assert payload["summary"]["total_amount"] == 1878.0
+    assert payload["summary"]["submission_status"] == "needs_review"
+    assert payload["summary"]["can_submit"] is False
+    assert payload["summary"]["affected_count"] == 2
+    assert payload["validation"]["issue_count"] > 0
     assert payload["records"][0]["平台"] == "去哪儿网"
     assert payload["trips"][0]["destination"] == "深圳"
 
@@ -161,6 +165,14 @@ def test_search_query_limits_recent_only_without_dates():
     assert search_cmd == "ALL"
     assert scan_label == "最近60封"
     assert limit_recent is True
+
+
+def test_split_flight_record_keeps_only_its_own_pdf_attachment():
+    attachments = ["3_上海-深圳-1280.00.pdf", "3_深圳-北京-980.00.pdf", "3_notice.png"]
+
+    selected = _attachments_for_pdf("深圳-北京-980.00.pdf", attachments)
+
+    assert selected == ["3_深圳-北京-980.00.pdf"]
 
 
 def test_wizard_rebuilds_from_json(tmp_path, monkeypatch):

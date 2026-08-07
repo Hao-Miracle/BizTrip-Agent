@@ -20,6 +20,7 @@ from biztrip_agent.web import (
     _run_config,
     _run_demo,
     _run_scan,
+    _summary_html,
     _start_job,
     _using_temporary_env,
     _validate_scan_inputs,
@@ -283,6 +284,26 @@ def test_result_summary_reads_latest_records_json(tmp_path):
     assert summary["record_count"] == 3
     assert summary["trip_count"] == 1
     assert summary["total_amount"] == 456.7
+    assert summary["submission_status"] == "unknown"
+
+
+def test_summary_html_shows_submission_verdict():
+    html = _summary_html(
+        {
+            "scan_label": "7月",
+            "record_count": 3,
+            "trip_count": 1,
+            "total_amount": 456.7,
+            "submission_status": "needs_review",
+            "affected_count": 2,
+            "issue_count": 3,
+        }
+    )
+
+    assert "暂不建议提交" in html
+    assert "2 条记录需要处理" in html
+    assert "已识别金额" in html
+    assert "待处理记录" in html
 
 
 def test_friendly_error_maps_common_failures():

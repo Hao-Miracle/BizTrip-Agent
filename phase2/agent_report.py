@@ -302,7 +302,8 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
                         record['出发地'] = pdf_info['出发地']
                     if pdf_info.get('目的地'):
                         record['目的地'] = pdf_info['目的地']
-                    records.append(enrich_record(record, subject, sender, attachments))
+                    record_attachments = _attachments_for_pdf(pdf['filename'], attachments)
+                    records.append(enrich_record(record, subject, sender, record_attachments))
                 continue
 
         extract_result = enrich_record(extract_result, subject, sender, attachments)
@@ -404,6 +405,16 @@ def _get_pdf_attachments_raw(msg):
             continue
         pdfs.append({'filename': fn})
     return pdfs
+
+
+def _attachments_for_pdf(filename, saved_attachments):
+    """Return the archived file that belongs to one PDF split record."""
+    matches = [
+        attachment
+        for attachment in saved_attachments
+        if attachment == filename or attachment.endswith(f"_{filename}")
+    ]
+    return matches or saved_attachments
 
 
 def _parse_pdf_filename(fn):
