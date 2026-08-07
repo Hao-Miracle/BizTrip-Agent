@@ -5,6 +5,7 @@
 """
 
 import os
+from datetime import datetime
 from email.header import decode_header
 
 
@@ -50,3 +51,9 @@ def get_email_config():
         port = 993
 
     return account, password, server, port
+
+
+def format_chinese_date(value=None):
+    """Format a date without relying on the operating system locale codec."""
+    value = value or datetime.now()
+    return f"{value.year:04d}年{value.month:02d}月{value.day:02d}日"

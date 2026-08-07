@@ -1,3 +1,6 @@
+from datetime import datetime
+
+from common.utils import format_chinese_date
 from phase2.llm_classify import classify_email
 from phase2.llm_extract import extract_record
 from phase2.llm_aggregate import aggregate_trips
@@ -53,6 +56,10 @@ def test_extracts_invoice_amount_and_date_without_llm():
 
     assert result["金额"] == 136.0
     assert result["日期"] == "2026年7月11日"
+
+
+def test_chinese_date_format_does_not_depend_on_system_locale():
+    assert format_chinese_date(datetime(2026, 8, 7)) == "2026年08月07日"
 
 
 def test_extracts_12306_amount_from_garbled_pdf_text_without_llm():

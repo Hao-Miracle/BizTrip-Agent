@@ -9,6 +9,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from common.utils import format_chinese_date
+
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = Path(os.getenv("BIZTRIP_DATA_DIR") or PROJECT_DIR)
@@ -118,7 +120,7 @@ def demo(output_dir, review=False):
     ws["A1"] = "差旅费用报销汇总单 · Demo"
     ws["A1"].font = title_font
     ws.merge_cells("A2:F2")
-    ws["A2"] = f"生成日期：{datetime.now().strftime('%Y年%m月%d日')} | 示例数据 | 出差相关：{len(records)} 条"
+    ws["A2"] = f"生成日期：{format_chinese_date()} | 示例数据 | 出差相关：{len(records)} 条"
     ws["A2"].font = Font(size=9, color="6B7280", name="微软雅黑")
     ws.merge_cells("A4:C4")
     ws["A4"] = "可报销总额"

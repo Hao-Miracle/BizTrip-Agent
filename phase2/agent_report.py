@@ -38,7 +38,7 @@ from dotenv import load_dotenv
 load_dotenv(os.getenv('BIZTRIP_ENV_PATH') or os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from common.utils import decode_str, get_email_config
+from common.utils import decode_str, format_chinese_date, get_email_config
 from common.email_parser import get_email_text
 from biztrip_agent.results import unique_output_path
 
@@ -484,7 +484,7 @@ def _generate_excel(records, trips, total_amount, scan_label, output_dir=OUTPUT_
     ws.row_dimensions[1].height = 30
 
     ws.merge_cells('A2:F2')
-    ws['A2'] = f'生成日期：{datetime.now().strftime("%Y年%m月%d日")}  |  扫描范围：{scan_label}  |  出差相关：{len(records)} 条'
+    ws['A2'] = f'生成日期：{format_chinese_date()}  |  扫描范围：{scan_label}  |  出差相关：{len(records)} 条'
     ws['A2'].font = Font(size=9, color='6B7280', name='微软雅黑')
 
     # 总额卡片
