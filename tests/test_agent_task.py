@@ -1,4 +1,8 @@
-from biztrip_agent.agent_task import AGENT_TASK_SCHEMA, build_agent_task
+from biztrip_agent.agent_task import (
+    AGENT_TASK_SCHEMA,
+    build_agent_task,
+    recover_record_fields,
+)
 
 
 def test_agent_task_completes_only_when_package_is_submittable():
@@ -46,3 +50,65 @@ def test_rule_mode_is_not_mislabeled_as_agent():
 
     assert task["mode"] == "rules"
     assert task["status"] == "needs_user_input"
+
+
+def test_recovery_uses_existing_structured_evidence_without_guessing():
+    records = [
+        {
+            "分类": "酒店",
+            "金额": 500.0,
+            "入住日期": "2026-08-02",
+            "酒店名称": "测试酒店",
+            "附件": "hotel.pdf",
+        },
+        {
+            "分类": "发票",
+            "金额": 88.0,
+            "日期": "2026-08-03",
+            "商家": "测试餐厅",
+            "附件": "invoice.pdf",
+        },
+    ]
+
+    actions = recover_record_fields(records)
+
+    assert records[0]["日期"] == "2026-08-02"
+    assert records[0]["供应商"] == "测试酒店"
+    assert records[1]["供应商"] == "测试餐厅"
+    assert len(actions) == 3
+    assert all(action["source"] == "existing_evidence" for action in actions)
+
+
+def test_recovery_records_attachment_backfill_and_reduces_open_issues():
+    records = [
+        {
+            "分类": "发票",
+            "金额": "",
+            "日期": "2026-08-03",
+            "供应商": "12306",
+            "附件": "train.zip",
+        }
+    ]
+
+    before = build_agent_task(records, [], "整理报销", use_llm=True)
+    actions = recover_record_fields(
+        records,
+        attachment_recoverer=lambda items: items[0].update({"金额": 149.0}),
+    )
+    after = build_agent_task(
+        records,
+        [],
+        "整理报销",
+        use_llm=True,
+        initial_validation={
+            **before["evidence"],
+            "issue_count": before["evidence"]["issue_count"],
+        },
+        recovery_actions=actions,
+    )
+
+    assert records[0]["金额"] == 149.0
+    assert actions[0]["field"] == "金额"
+    assert after["status"] == "completed"
+    assert after["evidence"]["resolved_issue_count"] == 1
+    assert after["decisions"][0]["action"] == "recover_field"

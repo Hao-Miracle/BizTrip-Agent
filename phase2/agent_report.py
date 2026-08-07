@@ -325,18 +325,29 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
         print('\n未发现出差相关邮件')
         return
 
-    enrich_records_from_attachments(records, output_dir=output_dir)
+    # ===== Step 4: 首次核验 + 自动补救 =====
+    from biztrip_agent.agent_task import recover_record_fields
+    from biztrip_agent.validation import validate_reimbursement
 
-    # ===== Step 4: 出差聚合 =====
     trips = aggregate_trips(records, use_llm=use_llm)
+    initial_validation = validate_reimbursement(records, trips)
+    recovery_actions = recover_record_fields(
+        records,
+        attachment_recoverer=lambda items: enrich_records_from_attachments(items, output_dir=output_dir),
+        vendor_resolver=infer_vendor,
+    )
+    if recovery_actions:
+        trips = aggregate_trips(records, use_llm=use_llm)
 
-    # ===== Step 5: 建立可追溯的 Agent 任务状态 =====
+    # ===== Step 5: 复核 + 建立可追溯的 Agent 任务状态 =====
     from biztrip_agent.agent_task import build_agent_task
     agent_task = build_agent_task(
         records,
         trips,
         goal=f'整理并核验 {scan_label} 的差旅报销材料',
         use_llm=use_llm,
+        initial_validation=initial_validation,
+        recovery_actions=recovery_actions,
     )
 
     # ===== Step 6: 生成 Excel =====
