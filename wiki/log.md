@@ -6,6 +6,13 @@ created: 2026-06-30
 
 # 操作日志
 
+## [2026-08-07] strategy | 建立开源竞品与护城河基线
+- 搜索并核实 TaxHacker、KDE Itinerary、Receipt Wrangler、AI Finance Office 和 Spliit 的能力边界
+- 确认 IMAP 邮箱归集、票据提取和费用导出已经有成熟开源实现，不能单独构成护城河
+- 将产品定位收紧为：中国商务差旅的订单与凭证配对、完整性验收和可直接提交的报销包
+- 确定下一项 P0：结果验收层；随后是订单与凭证配对、用户修正闭环
+- 明确暂不优先开发通用记账、定时扫描、企业审批流和 AI 聊天窗口
+
 ## [2026-06-30] setup | 初始化 BizTrip Agent 知识库
 - 在 `biztrip-agent/` 下创建完整知识库结构
 - AGENTS.md：配置 AI 协作知识库维护规则
