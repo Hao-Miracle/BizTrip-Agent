@@ -1,5 +1,6 @@
 import json
 
+import biztrip_agent.agent_interface as agent_interface
 from biztrip_agent.agent_interface import (
     INTERFACE_SCHEMA,
     answer_task,
@@ -85,6 +86,7 @@ def test_cli_agent_start_hides_human_logs_and_prints_one_json(tmp_path, capsys, 
         return {"results_path": str(source)}
 
     monkeypatch.setattr("phase2.agent_report.main", fake_start)
+    monkeypatch.setattr(agent_interface, "_account_configured", lambda: True)
 
     exit_code = main(["agent", "start", "--start", "2026-08-01", "--end", "2026-08-31"])
     output = capsys.readouterr().out.strip()
@@ -93,6 +95,17 @@ def test_cli_agent_start_hides_human_logs_and_prints_one_json(tmp_path, capsys, 
     assert exit_code == 0
     assert payload["operation"] == "start"
     assert "human progress" not in output
+
+
+def test_agent_start_routes_first_time_user_to_local_setup(capsys, monkeypatch):
+    monkeypatch.setattr(agent_interface, "_account_configured", lambda: False)
+
+    exit_code = main(["agent", "start", "--count", "60"])
+    payload = json.loads(capsys.readouterr().out.strip())
+
+    assert exit_code == 1
+    assert payload["error"]["code"] == "setup_required"
+    assert "授权码" in payload["error"]["message"]
 
 
 def test_cli_agent_answer_reads_structured_file(tmp_path, capsys):

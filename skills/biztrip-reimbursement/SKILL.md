@@ -24,7 +24,23 @@ Use the first available command:
 2. `.venv/bin/biztrip` from a BizTrip Agent checkout
 3. `python -m biztrip_agent.cli` from an installed environment
 
-If none is available, explain that the free local BizTrip Agent engine is required and direct the user to `https://github.com/Hao-Miracle/BizTrip-Agent`. Do not attempt to recreate the engine inside the skill.
+If none is available, run the bundled installer in check mode:
+
+```bash
+python <SKILL_DIR>/scripts/install_engine.py --check
+```
+
+Resolve `<SKILL_DIR>` from this `SKILL.md` location. Do not assume the user's current working directory.
+
+If it returns `not_installed`, explain that the free local engine will be downloaded from the public BizTrip Agent GitHub repository and installed into the user's local application directory. Ask for permission before downloading or installing anything. After approval, run:
+
+```bash
+python <SKILL_DIR>/scripts/install_engine.py
+```
+
+Parse its single JSON result and use `engine_command` for all later commands. Never run installation without explicit user approval. Never ask for administrator access, modify the system Python, or replace an existing installation.
+
+If Python is unavailable or below 3.8, show the returned requirement and direct the user to `https://www.python.org/downloads/`. Do not execute an untrusted third-party installer.
 
 ## Start a Task
 
@@ -43,6 +59,8 @@ biztrip agent start --count 60
 ```
 
 Parse stdout as one JSON object. Follow `status` and `next_action`; do not infer success from process text.
+
+If starting the task returns `setup_required` or `task_not_created`, launch the returned engine command with `web`. Tell the user to finish mailbox setup in that local page. Do not collect the mailbox address, authorization code, or LLM key in chat. After the user confirms setup is complete, retry the task once.
 
 ## Continue a Task
 

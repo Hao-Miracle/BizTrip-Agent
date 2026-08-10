@@ -16,6 +16,12 @@ def start_task(start=None, end=None, count=60, no_llm=False, output_dir="output"
     try:
         from phase2.agent_report import main as run_agent
 
+        if not _account_configured():
+            return _failure(
+                "start",
+                "setup_required",
+                "请先在本地 Web 页面完成邮箱账号和授权码配置。",
+            )
         with redirect_stdout(io.StringIO()):
             result = run_agent(
                 start=start,
@@ -163,3 +169,10 @@ def _failure(operation, code, message, task_path=None):
 def _safe_error(exc):
     message = str(exc).strip()
     return message[:500] if message else exc.__class__.__name__
+
+
+def _account_configured():
+    from common.utils import get_email_config
+
+    account, password, _server, _port = get_email_config()
+    return bool(account and password)
