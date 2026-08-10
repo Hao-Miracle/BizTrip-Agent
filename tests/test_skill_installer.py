@@ -37,7 +37,7 @@ def test_check_returns_existing_isolated_engine_command(tmp_path, capsys):
     assert exit_code == 0
     assert payload["status"] == "ready"
     assert payload["engine_command"] == str(command)
-    assert payload["web_command"].endswith("biztrip web")
+    assert payload["web_command"] == f"{command} web"
 
 
 def test_safe_extract_rejects_parent_directory_escape(tmp_path):
