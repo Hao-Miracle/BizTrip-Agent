@@ -12,6 +12,18 @@
 | **邮箱** | 已开启 IMAP 服务，并获取授权码/应用专用密码 |
 | **LLM API Key（可选）** | 如需 AI 增强功能，准备兼容 OpenAI 协议的 API Key |
 
+如果不确定电脑有没有 Python：
+
+```bash
+python3 --version
+```
+
+如果提示找不到 `python3`，或版本低于 `3.8`，先安装 Python 3.8+。macOS 用户可以从 [python.org](https://www.python.org/downloads/) 安装，或使用 Homebrew：
+
+```bash
+brew install python
+```
+
 ---
 
 ## 支持的邮箱服务商
@@ -30,83 +42,77 @@
 
 ## 安装步骤
 
-### 方式一：克隆仓库（推荐）
+### Windows 一键测试版
+
+Windows 测试人员优先使用一键版，无需安装 Python 和 Git：
+
+1. 从 GitHub Actions 的 **Windows One-Click Build** 下载 `BizTrip-Agent-Windows` 构建产物
+2. 解压后双击 `BizTrip-Agent-Windows.exe`
+3. 浏览器自动打开后，按页面指引配置邮箱并开始测试
+
+详细步骤见 [Windows 一键测试版](windows-one-click.md)。
+
+### 一条命令安装并启动
 
 ```bash
-git clone https://github.com/Hao-Miracle/BizTrip-Agent.git
-cd BizTrip-Agent
+git clone https://github.com/Hao-Miracle/BizTrip-Agent.git && cd BizTrip-Agent && python3 start.py
 ```
 
-### 方式二：下载 ZIP
+这条命令会自动创建本地运行环境并安装项目需要的 Python 依赖，包括 `python-dotenv`、`PyPDF2`、`openpyxl` 和本地 `biztrip` 命令。它不会自动安装 Python 本身，也不会替你开启邮箱 IMAP 或生成邮箱授权码。
+
+### 下载 ZIP
 
 直接从 [Releases](https://github.com/Hao-Miracle/BizTrip-Agent/releases) 下载最新版本的 ZIP 包，解压后进入目录。
 
 ---
 
-## 安装依赖
+## 手动安装依赖
 
-### 推荐：安装为本地命令
+通常不需要手动执行这些命令；一条命令安装会自动完成。需要排查安装问题时，可以手动运行：
 
 ```bash
-pipx install -e .
-biztrip web
+python3 -m venv .venv
+.venv/bin/python -m pip install -e .
+.venv/bin/biztrip web
 ```
 
-如果没有 `pipx`，也可以用当前 Python 环境：
+### LLM 增强依赖（可选）
+
+普通报销扫描不需要安装 `openai`。只有启用 LLM 增强时才需要：
 
 ```bash
-pip install -e .
-biztrip web
-```
-
-### 规则模式（零 API Key，推荐先试用）
-
-```bash
-pip install python-dotenv PyPDF2 openpyxl
-```
-
-### Agent 模式（LLM 增强，可选）
-
-在规则模式基础上，额外安装：
-
-```bash
-pip install openai
+.venv/bin/python -m pip install -e ".[llm]"
 ```
 
 ---
 
-## 配置
+## 首次配置
 
-### 1. 复制配置模板
+启动 Web 工作台：
 
 ```bash
-cp .env.example .env
+python3 start.py
 ```
 
-### 2. 编辑配置文件
+第一次使用时，页面会显示配置指引：
 
-打开 `.env`，至少填入邮箱配置：
+1. 打开邮箱设置，开启 IMAP/SMTP 服务
+2. 生成邮箱授权码或应用专用密码，不要使用登录密码
+3. 回到页面填写邮箱账号和授权码，点击“保存账号”
 
-```env
-# 邮箱账号
-EMAIL_ACCOUNT=your_email@example.com
+系统会按邮箱地址自动选择 IMAP 服务器，并把配置保存在本机 `.env` 文件中。普通用户不需要手动编辑 `.env`。
 
-# 邮箱授权码（不是登录密码！）
-EMAIL_PASSWORD=your_authorization_code
-```
+### （可选）配置 LLM
 
-### 3. （可选）配置 LLM
+普通报销扫描不需要 LLM。想启用增强识别时，在 Web 页面展开“LLM 增强配置”，填写接口地址、API Key 和模型名称。配置后不需要进入对话窗口，点击“开始生成”时系统会自动调用 LLM 辅助分类、提取和行程聚合。
 
-如需 AI 增强功能，追加 LLM 配置：
+| 字段 | 示例 |
+|------|------|
+| 接口地址 | `https://api.deepseek.com/v1` |
+| API Key | `sk-...` |
+| 模型名称 | `deepseek-chat` |
 
-```env
-# DeepSeek 示例
-LLM_API_KEY=sk-xxxxxxxxxxxxxxxx
-LLM_BASE_URL=https://api.deepseek.com/v1
-LLM_MODEL=deepseek-chat
-```
-
-更多服务商配置示例见 `.env.example`。
+高级用户也可以手动填写兼容 OpenAI 协议的其他服务商配置。更多服务商配置示例见 `.env.example`。
 
 ---
 

@@ -4,7 +4,9 @@ import argparse
 import html
 import importlib.util
 import json
+import os
 import shutil
+import subprocess
 import sys
 import threading
 import time
@@ -82,6 +84,13 @@ class BizTripWebHandler(BaseHTTPRequestHandler):
         if self.path == "/config":
             self._send_html(_run_config(form))
             return
+        if self.path == "/open-output":
+            self._send_html(_run_open_output())
+            return
+        if self.path == "/shutdown":
+            self._send_html(_shutdown_html())
+            threading.Thread(target=self.server.shutdown, daemon=True).start()
+            return
         self.send_error(404)
 
     def log_message(self, format, *args):
@@ -109,6 +118,7 @@ class BizTripWebHandler(BaseHTTPRequestHandler):
 
 def render_home(message=None, error=None, files=None, result_summary=None):
     """Render the local web UI."""
+    account_ready = _account_ready()
     message_html = ""
     if message:
         message_html = f'<div class="notice ok">{html.escape(message)}</div>'
@@ -117,8 +127,9 @@ def render_home(message=None, error=None, files=None, result_summary=None):
     files_html = _files_html(files or [])
     readiness_html = _readiness_html(readiness_status())
     config_html = _config_html()
-    recent_html = _recent_results_html()
-    summary_html = _summary_html(result_summary)
+    show_saved_results = account_ready and not _using_temporary_env()
+    recent_html = _recent_results_html() if show_saved_results else ""
+    summary_html = _summary_html(result_summary) if result_summary or show_saved_results else ""
     return f"""<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -201,6 +212,7 @@ def render_home(message=None, error=None, files=None, result_summary=None):
     }}
     .ok {{ border-color: #a8dab5; color: var(--green); }}
     .bad {{ border-color: #f4b6b1; color: var(--red); }}
+    .notice.warn {{ border-color: #fdd663; }}
     .files {{
       grid-column: 1 / -1;
       background: var(--panel);
@@ -260,6 +272,12 @@ def render_home(message=None, error=None, files=None, result_summary=None):
     .status.ok {{ border-color: #a8dab5; }}
     .status.warn {{ border-color: #fdd663; }}
     .status.bad {{ border-color: #f4b6b1; }}
+    .steps {{
+      margin: 10px 0 0;
+      padding-left: 22px;
+      color: var(--text);
+    }}
+    .steps li {{ margin: 6px 0; }}
     .secondary {{
       border-color: var(--line);
       background: #fff;
@@ -275,6 +293,12 @@ def render_home(message=None, error=None, files=None, result_summary=None):
       display: grid;
       grid-template-columns: repeat(2, minmax(220px, 1fr));
       gap: 12px;
+    }}
+    .tools {{
+      grid-column: 1 / -1;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      padding: 16px 18px;
     }}
     details {{
       grid-column: 1 / -1;
@@ -309,26 +333,7 @@ def render_home(message=None, error=None, files=None, result_summary=None):
     </section>
     {readiness_html}
     {config_html}
-    <section>
-      <h2>生成 Demo</h2>
-      <form method="post" action="/demo">
-        <label for="demo-output">输出目录</label>
-        <input id="demo-output" name="output_dir" type="text" value="output">
-        <label class="check"><input name="review" type="checkbox" checked> 同时生成审阅页面</label>
-        <button type="submit">生成 Demo</button>
-      </form>
-    </section>
-    <section>
-      <h2>从 JSON 重建</h2>
-      <form method="post" action="/rebuild">
-        <label for="json-path">records_YYYYMMDD_HHMMSS.json 路径</label>
-        <input id="json-path" name="json_path" type="text" placeholder="output/records_20260729_143022.json">
-        <label for="rebuild-output">输出目录</label>
-        <input id="rebuild-output" name="output_dir" type="text" placeholder="留空则输出到 JSON 所在目录">
-        <label class="check"><input name="review" type="checkbox" checked> 同时生成审阅页面</label>
-        <button type="submit">重建报表</button>
-      </form>
-    </section>
+    {_tools_html()}
   </main>
   <script>
     const jobPanel = document.getElementById("job-panel");
@@ -380,8 +385,7 @@ def render_home(message=None, error=None, files=None, result_summary=None):
 
 def readiness_status(project_dir=None):
     """Return local readiness flags without exposing secret values."""
-    project_dir = Path(project_dir) if project_dir else Path(__file__).resolve().parents[1]
-    env_path = project_dir / ".env"
+    env_path = Path(project_dir) / ".env" if project_dir else _env_path()
     env_values = _read_env_flags(env_path)
     return [
         {
@@ -437,7 +441,19 @@ def _dependency_status():
 
 
 def _env_path():
+    override = os.getenv("BIZTRIP_ENV_PATH", "").strip()
+    if override:
+        return Path(override).expanduser()
     return Path(__file__).resolve().parents[1] / ".env"
+
+
+def _using_temporary_env():
+    return bool(os.getenv("BIZTRIP_ENV_PATH", "").strip() and not os.getenv("BIZTRIP_DATA_DIR", "").strip())
+
+
+def _account_ready():
+    values = _read_env_values(_env_path())
+    return bool(values.get("EMAIL_ACCOUNT") and values.get("EMAIL_PASSWORD"))
 
 
 def _read_env_flags(env_path):
@@ -729,27 +745,59 @@ def _run_init():
 
 def _run_config(form):
     env_path = _env_path()
+    existing = _read_env_values(env_path)
     updates = {}
-    plain_fields = ["EMAIL_ACCOUNT", "EMAIL_IMAP_SERVER", "LLM_BASE_URL", "LLM_MODEL"]
-    secret_fields = ["EMAIL_PASSWORD", "LLM_API_KEY"]
+    plain_fields = ["LLM_BASE_URL", "LLM_MODEL"]
+    secret_fields = ["LLM_API_KEY"]
     for key in plain_fields:
         value = form.get(key, "").strip()
-        updates[key] = value
+        if value:
+            updates[key] = value
     for key in secret_fields:
         value = form.get(key, "").strip()
         if value:
             updates[key] = value
-    if not updates.get("EMAIL_ACCOUNT"):
-        return render_home(error="邮箱账号不能为空。")
+    if updates.get("LLM_API_KEY") or existing.get("LLM_API_KEY"):
+        if not updates.get("LLM_BASE_URL") and not existing.get("LLM_BASE_URL"):
+            updates["LLM_BASE_URL"] = "https://api.deepseek.com/v1"
+        if not updates.get("LLM_MODEL") and not existing.get("LLM_MODEL"):
+            updates["LLM_MODEL"] = "deepseek-chat"
+    if not updates:
+        return render_home(message="没有新的高级配置需要保存。")
     _write_env_values(env_path, updates)
     return render_home(message="配置已保存。密码和 API Key 不会在页面显示。")
+
+
+def _default_output_dir():
+    return Path(os.getenv("BIZTRIP_OUTPUT_DIR") or "output")
+
+
+def _run_open_output():
+    output_dir = _default_output_dir().expanduser().resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        if os.name == "nt":
+            os.startfile(str(output_dir))
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", str(output_dir)])
+        else:
+            subprocess.Popen(["xdg-open", str(output_dir)])
+    except (OSError, subprocess.SubprocessError) as exc:
+        return render_home(error=f"无法打开报销文件夹：{exc}")
+    return render_home(message=f"已打开报销文件夹：{output_dir}")
+
+
+def _shutdown_html():
+    return """<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>BizTrip Agent 已停止</title></head>
+<body style="font-family:Segoe UI,Microsoft YaHei,sans-serif;padding:40px;color:#202124">
+<h1>BizTrip Agent 已安全停止</h1><p>现在可以关闭这个页面。再次使用时，双击 BizTrip-Agent-Windows.exe。</p></body></html>"""
 
 
 def _latest_files(output_dir):
     output_dir = Path(output_dir)
     if not output_dir.exists():
         return []
-    names = ["*.xlsx", "review_*.html", "records_*.json"]
+    names = ["*.xlsx", "review_*.html"]
     files = []
     for pattern in names:
         files.extend(output_dir.glob(pattern))
@@ -769,6 +817,11 @@ def _result_summary(output_dir):
         "record_count": summary.get("record_count", 0),
         "trip_count": summary.get("trip_count", 0),
         "total_amount": summary.get("total_amount", 0),
+        "submission_status": summary.get("submission_status", "unknown"),
+        "can_submit": summary.get("can_submit"),
+        "complete_count": summary.get("complete_count", 0),
+        "affected_count": summary.get("affected_count", 0),
+        "issue_count": summary.get("issue_count", 0),
         "scan_label": payload.get("scan_label") or "最近结果",
         "json_path": str(records),
     }
@@ -793,25 +846,39 @@ def _files_html(files):
 
 
 def _summary_html(summary):
-    summary = summary or _result_summary("output")
+    summary = summary or _result_summary(_default_output_dir())
     if not summary:
         return ""
+    status = summary.get("submission_status")
+    if status == "ready":
+        verdict = '<div class="notice ok"><strong>可以提交</strong><br>所有记录均通过完整性检查。</div>'
+    elif status == "needs_review":
+        affected = int(summary.get("affected_count") or 0)
+        issues = int(summary.get("issue_count") or 0)
+        verdict = (
+            '<div class="notice bad"><strong>暂不建议提交</strong><br>'
+            f'{affected} 条记录需要处理，共发现 {issues} 个问题。请先打开审阅报告。</div>'
+        )
+    elif status == "empty":
+        verdict = '<div class="notice warn"><strong>没有可提交的记录</strong><br>请检查查询时间范围。</div>'
+    else:
+        verdict = '<div class="notice warn">这是旧版生成结果，请重新生成后查看完整性结论。</div>'
     return (
         '<section class="results">'
         "<h2>最近结果</h2>"
         f'<div class="sub">{html.escape(str(summary.get("scan_label") or "最近结果"))}</div>'
+        f'{verdict}'
         '<div class="result-grid">'
-        f'<div class="result-metric"><strong>¥ {float(summary.get("total_amount") or 0):,.2f}</strong><span>总金额</span></div>'
+        f'<div class="result-metric"><strong>¥ {float(summary.get("total_amount") or 0):,.2f}</strong><span>已识别金额</span></div>'
         f'<div class="result-metric"><strong>{int(summary.get("record_count") or 0)}</strong><span>记录数</span></div>'
-        f'<div class="result-metric"><strong>{int(summary.get("trip_count") or 0)}</strong><span>行程数</span></div>'
+        f'<div class="result-metric"><strong>{int(summary.get("affected_count") or 0)}</strong><span>待处理记录</span></div>'
         "</div>"
-        f'<div class="sub">JSON：{html.escape(str(summary.get("json_path") or ""))}</div>'
         "</section>"
     )
 
 
 def _recent_results_html():
-    files = _latest_files("output")
+    files = _latest_files(_default_output_dir())
     if not files:
         return ""
     return _files_html(files)
@@ -826,14 +893,35 @@ def _readiness_html(statuses):
             f'<span>{html.escape(item["detail"])}</span>'
             "</div>"
         )
+    blocking = [item for item in statuses if item["state"] == "bad"]
+    missing_account = [item for item in statuses if item["label"] in {"邮箱账号", "邮箱授权码"} and item["state"] != "ok"]
+    if blocking:
+        title = "需要先安装运行环境"
+        detail = "当前电脑缺少必要组件。展开诊断信息，按提示处理。"
+        state = "bad"
+    elif missing_account:
+        title = "需要先保存邮箱账号"
+        detail = "填写邮箱账号和授权码后，就可以生成报销包。"
+        state = "warn"
+    else:
+        title = "可以开始生成报销包"
+        detail = "账号和本地环境已准备好。"
+        state = "ok"
     return (
         '<section class="readiness">'
-        "<h2>本地就绪检查</h2>"
+        "<h2>准备状态</h2>"
+        f'<div class="status {html.escape(state)}">'
+        f'<strong>{html.escape(title)}</strong>'
+        f'<span>{html.escape(detail)}</span>'
+        "</div>"
+        '<form method="post" action="/init">'
+        '<button class="secondary" type="submit">修复配置文件</button>'
+        "</form>"
+        "<details>"
+        "<summary>诊断信息</summary>"
         '<div class="sub">只显示是否已配置，不显示邮箱授权码或 API Key。</div>'
         f'<div class="status-grid">{"".join(rows)}</div>'
-        '<form method="post" action="/init">'
-        '<button class="secondary" type="submit">生成 .env 模板</button>'
-        "</form>"
+        "</details>"
         "</section>"
     )
 
@@ -842,22 +930,69 @@ def _config_html():
     values = _read_env_values(_env_path())
     account = values.get("EMAIL_ACCOUNT", "")
     configured = bool(account and values.get("EMAIL_PASSWORD"))
+    onboarding_html = _onboarding_html(values, configured)
     account_html = _account_html(values, account, configured)
     scan_html = _scan_html(configured)
-    advanced_html = _advanced_config_html(values, account)
+    llm_html = _llm_config_html(values)
     return f"""
+    {onboarding_html}
     <section class="config">
       <h2>账号</h2>
       {account_html}
     </section>
     <section class="config">
-      <h2>开始扫描</h2>
+      <h2>生成报销包</h2>
       {scan_html}
     </section>
     <section class="config">
-      {advanced_html}
+      {llm_html}
     </section>
 """
+
+
+def _onboarding_html(values, configured):
+    if configured:
+        return ""
+    email = values.get("EMAIL_ACCOUNT", "")
+    provider_hint = _provider_setup_hint(email)
+    provider_rows = "".join(
+        f"<li>{html.escape(text)}</li>"
+        for text in [
+            "QQ 邮箱：设置 -> 账号 -> POP3/IMAP/SMTP/Exchange/CardDAV/CalDAV 服务 -> 开启 IMAP/SMTP -> 生成授权码。",
+            "163/126 邮箱：设置 -> POP3/SMTP/IMAP -> 开启 IMAP 服务 -> 生成授权码。",
+            "Gmail：先开启两步验证，再到账户安全里生成应用专用密码。",
+            "Outlook/Hotmail：到账户安全设置里生成应用密码；如果账号不支持应用密码，需确认账号是否允许 IMAP。",
+        ]
+    )
+    return f"""
+    <section class="config">
+      <h2>第一次使用</h2>
+      <div class="sub">先让邮箱允许本地工具读取发票邮件，再回到本页保存账号。</div>
+      <ol class="steps">
+        <li>打开邮箱设置，开启 IMAP/SMTP 服务。</li>
+        <li>生成邮箱授权码或应用专用密码，不要使用登录密码。</li>
+        <li>在下面填写邮箱账号和授权码，点击保存账号。</li>
+      </ol>
+      <div class="sub">{html.escape(provider_hint)}</div>
+      <details>
+        <summary>不同邮箱怎么拿授权码</summary>
+        <ul class="steps">{provider_rows}</ul>
+      </details>
+    </section>
+"""
+
+
+def _provider_setup_hint(email_account):
+    lowered = email_account.lower()
+    if "@qq.com" in lowered:
+        return "QQ 邮箱：设置 -> 账号 -> POP3/IMAP/SMTP/Exchange/CardDAV/CalDAV 服务，开启 IMAP/SMTP 后生成授权码。"
+    if "@163.com" in lowered or "@126.com" in lowered:
+        return "网易邮箱：设置 -> POP3/SMTP/IMAP，开启 IMAP 服务后生成授权码。"
+    if "@gmail.com" in lowered:
+        return "Gmail：开启两步验证后，到账户安全里生成应用专用密码。"
+    if "@outlook.com" in lowered or "@hotmail.com" in lowered:
+        return "Outlook/Hotmail：到账户安全设置里生成应用密码；如果账号不支持应用密码，需要使用支持 IMAP 的授权方式。"
+    return "常见邮箱都需要先开启 IMAP，并使用授权码或应用专用密码。QQ、163、126、Gmail、Outlook 会自动选择服务器。"
 
 
 def _account_html(values, account, configured):
@@ -870,7 +1005,7 @@ def _account_html(values, account, configured):
       </details>
 """
     return (
-        '<div class="sub">第一次使用只需要填写邮箱账号和邮箱授权码，系统会自动选择 IMAP 服务器。</div>'
+        '<div class="sub">保存后系统会自动选择 IMAP 服务器。授权码只保存在本机，页面不会回显。</div>'
         + _account_form(values, submit_label="保存账号")
     )
 
@@ -896,28 +1031,28 @@ def _account_form(values, submit_label):
 
 def _scan_html(configured):
     disabled = "" if configured else " disabled"
-    hint = "选择本次扫描范围。账号配置会复用，不需要每次填写。" if configured else "请先保存邮箱账号和授权码。"
+    output_dir = html.escape(str(_default_output_dir()))
+    hint = "填写这次要报销的时间范围，系统会生成 Excel 和审阅页。" if configured else "请先保存邮箱账号和授权码。"
     return f"""
       <div class="sub">{hint}</div>
       <form method="post" action="/scan" data-background="true">
         <div class="config-grid">
           <div>
-            <label for="scan-count">最近邮件数量</label>
-            <input id="scan-count" name="count" type="number" min="1" value="60"{disabled}>
+            <label for="scan-start">报销开始日期</label>
+            <input id="scan-start" name="start" type="text" placeholder="YYYY-MM-DD"{disabled}>
           </div>
           <div>
-            <label for="scan-output">输出目录</label>
-            <input id="scan-output" name="output_dir" type="text" value="output"{disabled}>
+            <label for="scan-end">报销结束日期</label>
+            <input id="scan-end" name="end" type="text" placeholder="YYYY-MM-DD"{disabled}>
           </div>
         </div>
-        <input name="start" type="hidden" value="">
-        <input name="end" type="hidden" value="">
-        <label class="check"><input name="review" type="checkbox" checked{disabled}> 同时生成审阅页面</label>
-        <label class="check"><input name="no_llm" type="checkbox" checked{disabled}> 先用规则模式，减少不确定性</label>
-        <button type="submit"{disabled}>开始扫描</button>
+        <input name="count" type="hidden" value="60">
+        <input name="output_dir" type="hidden" value="{output_dir}">
+        <input name="review" type="hidden" value="on">
+        <button type="submit"{disabled}>开始生成</button>
       </form>
       <details>
-        <summary>按日期扫描</summary>
+        <summary>高级扫描选项</summary>
         <form method="post" action="/scan" data-background="true">
           <div class="config-grid">
             <div>
@@ -929,56 +1064,87 @@ def _scan_html(configured):
               <input id="scan-end" name="end" type="text" placeholder="YYYY-MM-DD，可留空"{disabled}>
             </div>
             <div>
-              <label for="scan-date-count">未填日期时扫描数量</label>
+              <label for="scan-date-count">未填日期时扫描最近邮件数量</label>
               <input id="scan-date-count" name="count" type="number" min="1" value="60"{disabled}>
             </div>
             <div>
               <label for="scan-date-output">输出目录</label>
-              <input id="scan-date-output" name="output_dir" type="text" value="output"{disabled}>
+              <input id="scan-date-output" name="output_dir" type="text" value="{output_dir}"{disabled}>
             </div>
           </div>
           <label class="check"><input name="review" type="checkbox" checked{disabled}> 同时生成审阅页面</label>
           <label class="check"><input name="no_llm" type="checkbox"{disabled}> 只用规则模式</label>
-          <button type="submit"{disabled}>开始日期扫描</button>
+          <button type="submit"{disabled}>开始生成</button>
         </form>
       </details>
 """
 
 
-def _advanced_config_html(values, account):
+def _llm_config_html(values):
+    llm_enabled = bool(values.get("LLM_API_KEY"))
+    llm_status = "已启用。点击开始生成时自动调用；没有单独对话窗口，失败时自动回到规则模式。" if llm_enabled else "可选。不配置也能使用规则模式；配置后点击开始生成时自动调用，没有单独对话窗口。"
     return f"""
       <details>
-        <summary>高级配置</summary>
+        <summary>LLM 增强配置</summary>
+        <div class="sub">{html.escape(llm_status)}</div>
+        <div class="sub">配置后点击“开始生成”时，系统会自动用 LLM 辅助分类、提取和行程聚合。</div>
         <form method="post" action="/config">
-          <div class="config-grid">
-            <div>
-              <label for="adv-email">邮箱账号</label>
-              <input id="adv-email" name="EMAIL_ACCOUNT" type="text" value="{html.escape(account)}">
-            </div>
-            <div>
-              <label for="adv-password">邮箱授权码</label>
-              <input id="adv-password" name="EMAIL_PASSWORD" type="password" placeholder="{_secret_placeholder(values.get("EMAIL_PASSWORD"))}">
-            </div>
+          <input name="EMAIL_ACCOUNT" type="hidden" value="{html.escape(values.get("EMAIL_ACCOUNT", ""))}">
+          <input name="EMAIL_IMAP_SERVER" type="hidden" value="{html.escape(values.get("EMAIL_IMAP_SERVER", ""))}">
           <div>
-            <label for="cfg-imap">IMAP 服务器</label>
-            <input id="cfg-imap" name="EMAIL_IMAP_SERVER" type="text" value="{html.escape(values.get("EMAIL_IMAP_SERVER", ""))}" placeholder="{html.escape(_infer_imap_server(account) or "可留空自动推断")}">
+            <label for="llm-base">接口地址</label>
+            <input id="llm-base" name="LLM_BASE_URL" type="text" value="{html.escape(values.get("LLM_BASE_URL", ""))}" placeholder="https://api.deepseek.com/v1">
           </div>
           <div>
-            <label for="cfg-key">LLM API Key（可选）</label>
-            <input id="cfg-key" name="LLM_API_KEY" type="password" placeholder="{_secret_placeholder(values.get("LLM_API_KEY"))}">
+            <label for="llm-key">API Key</label>
+            <input id="llm-key" name="LLM_API_KEY" type="password" placeholder="{_secret_placeholder(values.get("LLM_API_KEY"))}">
           </div>
           <div>
-            <label for="cfg-base">LLM Base URL（可选）</label>
-            <input id="cfg-base" name="LLM_BASE_URL" type="text" value="{html.escape(values.get("LLM_BASE_URL", ""))}">
+            <label for="llm-model">模型名称</label>
+            <input id="llm-model" name="LLM_MODEL" type="text" value="{html.escape(values.get("LLM_MODEL", ""))}" placeholder="deepseek-chat">
           </div>
-          <div>
-            <label for="cfg-model">LLM Model（可选）</label>
-            <input id="cfg-model" name="LLM_MODEL" type="text" value="{html.escape(values.get("LLM_MODEL", ""))}">
-          </div>
-          </div>
-          <button type="submit">保存高级配置</button>
+          <button type="submit">保存 LLM 配置</button>
         </form>
       </details>
+"""
+
+
+def _tools_html():
+    output_dir = html.escape(str(_default_output_dir()))
+    return f"""
+    <section class="tools">
+      <details>
+        <summary>维护工具</summary>
+        <div class="config-grid">
+          <form method="post" action="/demo">
+            <h2>生成 Demo</h2>
+            <label for="demo-output">输出目录</label>
+            <input id="demo-output" name="output_dir" type="text" value="{output_dir}">
+            <label class="check"><input name="review" type="checkbox" checked> 同时生成审阅页面</label>
+            <button type="submit">生成 Demo</button>
+          </form>
+          <form method="post" action="/open-output">
+            <h2>报销文件</h2>
+            <div class="sub">Excel、审阅报告和凭证原件保存在这里。</div>
+            <button type="submit">打开报销文件夹</button>
+          </form>
+          <form method="post" action="/shutdown">
+            <h2>停止程序</h2>
+            <div class="sub">完成测试后安全停止本地服务。</div>
+            <button type="submit">安全停止程序</button>
+          </form>
+          <form method="post" action="/rebuild">
+            <h2>从 JSON 重建</h2>
+            <label for="json-path">records_YYYYMMDD_HHMMSS.json 路径</label>
+            <input id="json-path" name="json_path" type="text" placeholder="output/records_20260729_143022.json">
+            <label for="rebuild-output">输出目录</label>
+            <input id="rebuild-output" name="output_dir" type="text" placeholder="留空则输出到 JSON 所在目录">
+            <label class="check"><input name="review" type="checkbox" checked> 同时生成审阅页面</label>
+            <button type="submit">重建报表</button>
+          </form>
+        </div>
+      </details>
+    </section>
 """
 
 

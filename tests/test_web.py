@@ -9,15 +9,21 @@ from biztrip_agent.web import (
     BizTripWebHandler,
     _friendly_error,
     _infer_imap_server,
+    _env_path,
     _job_snapshot,
+    _onboarding_html,
+    _provider_setup_hint,
     _preflight_scan,
     _read_env_values,
     _result_summary,
     _run_account,
     _run_config,
+    _shutdown_html,
     _run_demo,
     _run_scan,
+    _summary_html,
     _start_job,
+    _using_temporary_env,
     _validate_scan_inputs,
     _write_env_values,
     readiness_status,
@@ -25,7 +31,8 @@ from biztrip_agent.web import (
 )
 
 
-def test_web_home_contains_local_workflows():
+def test_web_home_contains_local_workflows(monkeypatch, tmp_path):
+    monkeypatch.setenv("BIZTRIP_ENV_PATH", str(tmp_path / "test.env"))
     html = render_home()
 
     assert "BizTrip Agent" in html
@@ -35,12 +42,106 @@ def test_web_home_contains_local_workflows():
     assert 'action="/init"' in html
     assert 'action="/config"' in html
     assert "账号" in html
-    assert "开始扫描" in html
+    assert "生成报销包" in html
     assert "保存账号" in html
-    assert "按日期扫描" in html
-    assert "高级配置" in html
-    assert "本地就绪检查" in html
+    assert "报销开始日期" in html
+    assert "报销结束日期" in html
+    assert "高级扫描选项" in html
+    assert "维护工具" in html
+    assert "LLM 增强配置" in html
+    assert "接口地址" in html
+    assert "API Key" in html
+    assert "模型名称" in html
+    assert "点击开始生成时自动调用" in html
+    assert "没有单独对话窗口" in html
+    assert "提供商" not in html
+    assert "准备状态" in html
+    assert "诊断信息" in html
     assert "records_YYYYMMDD_HHMMSS.json" in html
+    assert "打开报销文件夹" in html
+    assert "安全停止程序" in html
+
+
+def test_windows_output_directory_is_used_in_forms(monkeypatch, tmp_path):
+    output_dir = tmp_path / "Documents" / "BizTrip Agent"
+    monkeypatch.setenv("BIZTRIP_OUTPUT_DIR", str(output_dir))
+    monkeypatch.setenv("BIZTRIP_ENV_PATH", str(tmp_path / ".env"))
+
+    html = render_home()
+
+    assert str(output_dir) in html
+
+
+def test_shutdown_page_explains_how_to_restart():
+    html = _shutdown_html()
+
+    assert "已安全停止" in html
+    assert "BizTrip-Agent-Windows.exe" in html
+
+
+def test_web_env_path_can_use_temporary_first_run_config(monkeypatch, tmp_path):
+    env_path = tmp_path / "first-run.env"
+    monkeypatch.setenv("BIZTRIP_ENV_PATH", str(env_path))
+
+    assert _env_path() == env_path
+    html = render_home()
+    assert _using_temporary_env() is True
+    assert "第一次使用" in html
+    assert "最近结果" not in html
+    assert "生成文件" not in html
+
+
+def test_web_hides_saved_results_until_account_is_ready(monkeypatch, tmp_path):
+    env_path = tmp_path / ".env"
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+    (output_dir / "records_20260731_120000.json").write_text(
+        '{"scan_label":"旧结果","summary":{"record_count":9,"trip_count":3,"total_amount":1234.5}}',
+        encoding="utf-8",
+    )
+    (output_dir / "差旅汇总_20260731_120000.xlsx").write_text("demo", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("BIZTRIP_ENV_PATH", raising=False)
+    monkeypatch.setattr("biztrip_agent.web._env_path", lambda: env_path)
+
+    html = render_home()
+
+    assert "第一次使用" in html
+    assert "旧结果" not in html
+    assert "最近结果" not in html
+    assert "生成文件" not in html
+
+    env_path.write_text("EMAIL_ACCOUNT=user@qq.com\nEMAIL_PASSWORD=token\n", encoding="utf-8")
+    html = render_home()
+
+    assert "旧结果" in html
+    assert "最近结果" in html
+    assert "生成文件" in html
+
+
+def test_first_run_onboarding_guides_account_setup():
+    html = _onboarding_html({}, configured=False)
+
+    assert "第一次使用" in html
+    assert "开启 IMAP/SMTP 服务" in html
+    assert "生成邮箱授权码" in html
+    assert "不要使用登录密码" in html
+    assert "不同邮箱怎么拿授权码" in html
+    assert "QQ 邮箱" in html
+    assert "163/126 邮箱" in html
+    assert "Gmail" in html
+    assert "Outlook/Hotmail" in html
+
+
+def test_first_run_onboarding_hides_after_configured():
+    assert _onboarding_html({"EMAIL_ACCOUNT": "user@qq.com"}, configured=True) == ""
+
+
+def test_provider_setup_hint_matches_common_email_domains():
+    assert "QQ 邮箱" in _provider_setup_hint("user@qq.com")
+    assert "网易邮箱" in _provider_setup_hint("user@163.com")
+    assert "Gmail" in _provider_setup_hint("user@gmail.com")
+    assert "常见邮箱" in _provider_setup_hint("user@example.com")
 
 
 def test_web_rejects_invalid_port():
@@ -100,6 +201,39 @@ def test_web_scan_form_passes_safe_args(monkeypatch, tmp_path):
     assert args.no_llm is True
     assert "EMAIL_PASSWORD" not in str(snapshot)
     assert "LLM_API_KEY" not in str(snapshot)
+
+
+def test_web_primary_scan_uses_user_reimbursement_period(monkeypatch, tmp_path):
+    captured = {}
+
+    def fake_scan(args):
+        captured["args"] = args
+        tmp_path.joinpath("records_20260730_120000.json").write_text("{}", encoding="utf-8")
+        return 0
+
+    monkeypatch.setattr("biztrip_agent.cli.scan", fake_scan)
+    monkeypatch.setattr("biztrip_agent.web._preflight_scan", lambda _output_dir: None)
+
+    payload = _run_scan(
+        {
+            "start": "2026-07-01",
+            "end": "2026-07-30",
+            "count": "60",
+            "output_dir": str(tmp_path),
+            "review": "on",
+        }
+    )
+    deadline = time.time() + 2
+    snapshot = _job_snapshot(payload["job_id"])
+    while snapshot["status"] in {"queued", "running"} and time.time() < deadline:
+        time.sleep(0.02)
+        snapshot = _job_snapshot(payload["job_id"])
+
+    args = captured["args"]
+    assert snapshot["status"] == "succeeded"
+    assert args.start == "2026-07-01"
+    assert args.end == "2026-07-30"
+    assert args.count == 60
 
 
 def test_account_form_saves_config_and_infers_imap(monkeypatch, tmp_path):
@@ -170,6 +304,26 @@ def test_result_summary_reads_latest_records_json(tmp_path):
     assert summary["record_count"] == 3
     assert summary["trip_count"] == 1
     assert summary["total_amount"] == 456.7
+    assert summary["submission_status"] == "unknown"
+
+
+def test_summary_html_shows_submission_verdict():
+    html = _summary_html(
+        {
+            "scan_label": "7月",
+            "record_count": 3,
+            "trip_count": 1,
+            "total_amount": 456.7,
+            "submission_status": "needs_review",
+            "affected_count": 2,
+            "issue_count": 3,
+        }
+    )
+
+    assert "暂不建议提交" in html
+    assert "2 条记录需要处理" in html
+    assert "已识别金额" in html
+    assert "待处理记录" in html
 
 
 def test_friendly_error_maps_common_failures():
@@ -219,16 +373,13 @@ def test_env_writer_preserves_comments_and_updates_values(tmp_path):
     assert _read_env_values(env_path)["EMAIL_ACCOUNT"] == "new@example.com"
 
 
-def test_config_form_saves_without_overwriting_blank_secrets(monkeypatch, tmp_path):
+def test_llm_config_saves_without_overwriting_blank_secret(monkeypatch, tmp_path):
     env_path = tmp_path / ".env"
     env_path.write_text("EMAIL_ACCOUNT=old@example.com\nEMAIL_PASSWORD=keep-me\nLLM_API_KEY=keep-key\n", encoding="utf-8")
     monkeypatch.setattr("biztrip_agent.web._env_path", lambda: env_path)
 
     html = _run_config(
         {
-            "EMAIL_ACCOUNT": "user@example.com",
-            "EMAIL_PASSWORD": "",
-            "EMAIL_IMAP_SERVER": "imap.example.com",
             "LLM_API_KEY": "",
             "LLM_BASE_URL": "https://api.example.com/v1",
             "LLM_MODEL": "example-chat",
@@ -237,12 +388,82 @@ def test_config_form_saves_without_overwriting_blank_secrets(monkeypatch, tmp_pa
 
     values = _read_env_values(env_path)
     assert "配置已保存" in html
-    assert values["EMAIL_ACCOUNT"] == "user@example.com"
+    assert values["EMAIL_ACCOUNT"] == "old@example.com"
     assert values["EMAIL_PASSWORD"] == "keep-me"
     assert values["LLM_API_KEY"] == "keep-key"
-    assert values["EMAIL_IMAP_SERVER"] == "imap.example.com"
+    assert values["LLM_BASE_URL"] == "https://api.example.com/v1"
+    assert values["LLM_MODEL"] == "example-chat"
     assert "keep-me" not in html
     assert "keep-key" not in html
+
+
+def test_config_form_defaults_llm_provider_when_key_is_added(monkeypatch, tmp_path):
+    env_path = tmp_path / ".env"
+    env_path.write_text("EMAIL_ACCOUNT=user@example.com\nEMAIL_PASSWORD=keep-me\n", encoding="utf-8")
+    monkeypatch.setattr("biztrip_agent.web._env_path", lambda: env_path)
+
+    html = _run_config(
+        {
+            "EMAIL_ACCOUNT": "user@example.com",
+            "LLM_API_KEY": "sk-test",
+            "LLM_BASE_URL": "",
+            "LLM_MODEL": "",
+        }
+    )
+
+    values = _read_env_values(env_path)
+    assert "配置已保存" in html
+    assert values["LLM_API_KEY"] == "sk-test"
+    assert values["LLM_BASE_URL"] == "https://api.deepseek.com/v1"
+    assert values["LLM_MODEL"] == "deepseek-chat"
+    assert "sk-test" not in html
+
+
+def test_llm_config_can_be_saved_separately(monkeypatch, tmp_path):
+    env_path = tmp_path / ".env"
+    env_path.write_text("EMAIL_ACCOUNT=user@example.com\nEMAIL_PASSWORD=keep-me\n", encoding="utf-8")
+    monkeypatch.setattr("biztrip_agent.web._env_path", lambda: env_path)
+
+    html = _run_config(
+        {
+            "LLM_BASE_URL": "http://127.0.0.1:8000/v1",
+            "LLM_API_KEY": "sk-test",
+            "LLM_MODEL": "Qwen3.5-9B",
+        }
+    )
+
+    values = _read_env_values(env_path)
+    assert "配置已保存" in html
+    assert values["EMAIL_ACCOUNT"] == "user@example.com"
+    assert values["LLM_BASE_URL"] == "http://127.0.0.1:8000/v1"
+    assert values["LLM_API_KEY"] == "sk-test"
+    assert values["LLM_MODEL"] == "Qwen3.5-9B"
+
+
+def test_config_form_keeps_existing_custom_llm_provider(monkeypatch, tmp_path):
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "EMAIL_ACCOUNT=user@example.com\n"
+        "EMAIL_PASSWORD=keep-me\n"
+        "LLM_API_KEY=keep-key\n"
+        "LLM_BASE_URL=https://api.example.com/v1\n"
+        "LLM_MODEL=example-chat\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("biztrip_agent.web._env_path", lambda: env_path)
+
+    _run_config(
+        {
+            "EMAIL_ACCOUNT": "user@example.com",
+            "LLM_API_KEY": "",
+            "LLM_BASE_URL": "",
+            "LLM_MODEL": "",
+        }
+    )
+
+    values = _read_env_values(env_path)
+    assert values["LLM_BASE_URL"] == "https://api.example.com/v1"
+    assert values["LLM_MODEL"] == "example-chat"
 
 
 def test_web_home_supports_head_request():

@@ -6,6 +6,7 @@ from html import escape
 from pathlib import Path
 
 from biztrip_agent.results import unique_output_path
+from biztrip_agent.validation import validate_reimbursement
 
 
 def generate_review_html(records, trips, output_dir, scan_label, excel_path=None):
@@ -14,7 +15,8 @@ def generate_review_html(records, trips, output_dir, scan_label, excel_path=None
     output_dir.mkdir(parents=True, exist_ok=True)
 
     total = sum(record.get("金额", 0) or 0 for record in records)
-    issues = _issue_rows(records)
+    validation = validate_reimbursement(records, trips)
+    issues = _issue_rows(records, validation)
     categories = _category_totals(records)
     generated_at = datetime.now().strftime("%Y-%m-%d %H:%M")
     review_path = unique_output_path(output_dir, "review", ".html")
@@ -105,6 +107,15 @@ def generate_review_html(records, trips, output_dir, scan_label, excel_path=None
       font-size: 13px;
       margin: 6px 0 14px;
     }}
+    .verdict {{
+      margin-top: 18px;
+      border: 1px solid var(--line);
+      padding: 16px;
+    }}
+    .verdict strong {{ display: block; font-size: 20px; margin-bottom: 4px; }}
+    .verdict.ready {{ border-color: #6ee7b7; background: #ecfdf5; color: var(--green); }}
+    .verdict.needs-review {{ border-color: #fca5a5; background: #fef2f2; color: var(--red); }}
+    .verdict.empty {{ border-color: #fde68a; background: #fffbeb; color: var(--yellow); }}
     a {{ color: var(--blue); text-decoration: none; }}
     @media (max-width: 760px) {{
       header, main {{ padding-left: 16px; padding-right: 16px; }}
@@ -117,23 +128,24 @@ def generate_review_html(records, trips, output_dir, scan_label, excel_path=None
   <header>
     <h1>BizTrip Agent 审阅报告</h1>
     <div class="meta">生成时间：{escape(generated_at)} · 扫描范围：{escape(scan_label)}{_excel_link(excel_path)}</div>
+    {_verdict(validation)}
     <section class="metrics">
-      <div class="metric"><div class="metric-label">可报销总额</div><div class="metric-value">¥ {total:,.2f}</div></div>
+      <div class="metric"><div class="metric-label">已识别金额</div><div class="metric-value">¥ {total:,.2f}</div></div>
       <div class="metric"><div class="metric-label">记录数</div><div class="metric-value">{len(records)}</div></div>
-      <div class="metric"><div class="metric-label">行程数</div><div class="metric-value">{len(trips)}</div></div>
-      <div class="metric"><div class="metric-label">需检查</div><div class="metric-value">{len(issues)}</div></div>
+      <div class="metric"><div class="metric-label">完整记录</div><div class="metric-value">{validation['complete_count']}</div></div>
+      <div class="metric"><div class="metric-label">待处理记录</div><div class="metric-value">{validation['affected_count']}</div></div>
     </section>
   </header>
   <main>
     <h2>需检查项</h2>
-    <p class="note">金额、日期或附件缺失的记录会出现在这里。报销前优先核对这些行。</p>
+    <p class="note">缺少关键信息、未归入行程、疑似重复或数据冲突的记录会出现在这里。</p>
     {_issues_table(issues)}
     <h2>按类别汇总</h2>
     {_category_table(categories, total)}
     <h2>行程汇总</h2>
     {_trip_table(trips)}
     <h2>费用明细</h2>
-    {_records_table(records)}
+    {_records_table(records, validation)}
   </main>
 </body>
 </html>
@@ -149,18 +161,22 @@ def _excel_link(excel_path):
     return f' · Excel：<a href="{escape(path.name)}">{escape(path.name)}</a>'
 
 
-def _issue_rows(records):
+def _verdict(validation):
+    css_class = validation["status"].replace("_", "-")
+    return (
+        f'<div class="verdict {css_class}">'
+        f'<strong>{escape(validation["title"])}</strong>'
+        f'<span>{escape(validation["detail"])}</span>'
+        "</div>"
+    )
+
+
+def _issue_rows(records, validation):
     issues = []
-    for index, record in enumerate(records, 1):
-        missing = []
-        if not record.get("金额"):
-            missing.append("缺金额")
-        if not record.get("日期"):
-            missing.append("缺日期")
-        if not record.get("附件"):
-            missing.append("无附件")
-        if missing:
-            issues.append((index, record, missing))
+    for result in validation["records"]:
+        if result["issues"]:
+            labels = [issue["label"] for issue in result["issues"]]
+            issues.append((result["index"], records[result["index"] - 1], labels))
     return issues
 
 
@@ -175,7 +191,7 @@ def _category_totals(records):
 
 def _issues_table(issues):
     if not issues:
-        return '<p><span class="badge ok">未发现明显缺失字段</span></p>'
+        return '<p><span class="badge ok">未发现需要处理的问题</span></p>'
     rows = []
     for index, record, missing in issues:
         missing_badges = "".join(
@@ -228,11 +244,20 @@ def _trip_table(trips):
     return _table(["行程", "目的地", "日期", "记录数", "金额", "摘要"], rows)
 
 
-def _records_table(records):
+def _records_table(records, validation):
+    status_by_record_id = {
+        id(records[result["index"] - 1]): result
+        for result in validation["records"]
+    }
     rows = []
     for index, record in enumerate(sorted(records, key=lambda item: str(item.get("日期") or "")), 1):
         route = _route(record)
-        status = '<span class="badge ok">OK</span>' if not _issue_rows([record]) else '<span class="badge warn">检查</span>'
+        result = status_by_record_id[id(record)]
+        status = (
+            '<span class="badge ok">完整</span>'
+            if result["status"] == "complete"
+            else '<span class="badge warn">待处理</span>'
+        )
         rows.append(
             "<tr>"
             f"<td>{index}</td>"

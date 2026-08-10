@@ -30,15 +30,15 @@ import os
 import sys
 import re
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from io import BytesIO
 
 from dotenv import load_dotenv
 
-load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
+load_dotenv(os.getenv('BIZTRIP_ENV_PATH') or os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from common.utils import decode_str, get_email_config
+from common.utils import decode_str, format_chinese_date, get_email_config
 from common.email_parser import get_email_text
 from biztrip_agent.results import unique_output_path
 
@@ -214,9 +214,7 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
     email_addr, auth_code, imap_server, imap_port = get_email_config()
 
     if not email_addr or not auth_code:
-        print('❌ 请在 .env 中配置邮箱信息')
-        print('   EMAIL_ACCOUNT=your_email@example.com')
-        print('   EMAIL_PASSWORD=your_authorization_code')
+        print('❌ 请先在 Web 页面保存邮箱账号和邮箱授权码')
         return
 
     use_llm = llm_available() and not no_llm
@@ -248,28 +246,7 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
         start = start or ''
         end = end or ''
 
-    if start or end:
-        parts = []
-        display = []
-        if start:
-            try:
-                dt = datetime.strptime(start, '%Y-%m-%d')
-                parts.append(f'SINCE {dt.strftime("%d-%b-%Y")}')
-                display.append(start)
-            except ValueError:
-                print('  ⚠️ 开始日期格式错误，已忽略')
-        if end:
-            try:
-                dt = datetime.strptime(end, '%Y-%m-%d')
-                parts.append(f'BEFORE {dt.strftime("%d-%b-%Y")}')
-                display.append(end)
-            except ValueError:
-                print('  ⚠️ 结束日期格式错误，已忽略')
-        search_cmd = ' '.join(parts) if parts else 'ALL'
-        scan_label = '~'.join(display) if display else '全部'
-    else:
-        search_cmd = 'ALL'
-        scan_label = f'最近{count}封'
+    search_cmd, scan_label, limit_recent = _build_search_query(start, end, count)
 
     status, data = conn.search(None, search_cmd)
     if status != 'OK' or not data[0]:
@@ -278,7 +255,7 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
         return
 
     mail_ids = data[0].split()
-    if not start and not end:
+    if limit_recent:
         mail_ids = mail_ids[-count:]
 
     print(f'\n📬 扫描范围: {scan_label} ({len(mail_ids)} 封邮件)')
@@ -325,7 +302,8 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
                         record['出发地'] = pdf_info['出发地']
                     if pdf_info.get('目的地'):
                         record['目的地'] = pdf_info['目的地']
-                    records.append(enrich_record(record, subject, sender, attachments))
+                    record_attachments = _attachments_for_pdf(pdf['filename'], attachments)
+                    records.append(enrich_record(record, subject, sender, record_attachments))
                 continue
 
         extract_result = enrich_record(extract_result, subject, sender, attachments)
@@ -389,6 +367,28 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
     }
 
 
+def _build_search_query(start, end, count):
+    parts = []
+    display = []
+    if start:
+        try:
+            dt = datetime.strptime(start, '%Y-%m-%d')
+            parts.append(f'SINCE {dt.strftime("%d-%b-%Y")}')
+            display.append(start)
+        except ValueError:
+            print('  ⚠️ 开始日期格式错误，已忽略')
+    if end:
+        try:
+            dt = datetime.strptime(end, '%Y-%m-%d')
+            parts.append(f'BEFORE {(dt + timedelta(days=1)).strftime("%d-%b-%Y")}')
+            display.append(end)
+        except ValueError:
+            print('  ⚠️ 结束日期格式错误，已忽略')
+    if parts:
+        return ' '.join(parts), '~'.join(display), False
+    return 'ALL', f'最近{count}封', True
+
+
 def _get_pdf_attachments_raw(msg):
     """提取邮件中所有 PDF 附件"""
     pdfs = []
@@ -405,6 +405,16 @@ def _get_pdf_attachments_raw(msg):
             continue
         pdfs.append({'filename': fn})
     return pdfs
+
+
+def _attachments_for_pdf(filename, saved_attachments):
+    """Return the archived file that belongs to one PDF split record."""
+    matches = [
+        attachment
+        for attachment in saved_attachments
+        if attachment == filename or attachment.endswith(f"_{filename}")
+    ]
+    return matches or saved_attachments
 
 
 def _parse_pdf_filename(fn):
@@ -474,7 +484,7 @@ def _generate_excel(records, trips, total_amount, scan_label, output_dir=OUTPUT_
     ws.row_dimensions[1].height = 30
 
     ws.merge_cells('A2:F2')
-    ws['A2'] = f'生成日期：{datetime.now().strftime("%Y年%m月%d日")}  |  扫描范围：{scan_label}  |  出差相关：{len(records)} 条'
+    ws['A2'] = f'生成日期：{format_chinese_date()}  |  扫描范围：{scan_label}  |  出差相关：{len(records)} 条'
     ws['A2'].font = Font(size=9, color='6B7280', name='微软雅黑')
 
     # 总额卡片
