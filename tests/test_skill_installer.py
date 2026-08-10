@@ -21,12 +21,15 @@ def test_check_reports_missing_engine_without_installing(tmp_path, capsys):
     assert not target.exists()
 
 
-def test_check_returns_existing_isolated_engine_command(tmp_path, capsys, monkeypatch):
+def test_check_returns_existing_isolated_engine_command(tmp_path, capsys):
     target = tmp_path / "engine"
-    command = target / ".venv" / "bin" / "biztrip"
+    command = (
+        target / ".venv" / "Scripts" / "biztrip.exe"
+        if INSTALLER.os.name == "nt"
+        else target / ".venv" / "bin" / "biztrip"
+    )
     command.parent.mkdir(parents=True)
     command.write_text("launcher", encoding="utf-8")
-    monkeypatch.setattr(INSTALLER.os, "name", "posix")
 
     exit_code = INSTALLER.main(["--check", "--install-dir", str(target)])
     payload = json.loads(capsys.readouterr().out)
