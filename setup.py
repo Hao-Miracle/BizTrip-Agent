@@ -6,7 +6,7 @@ from setuptools import find_packages, setup
 setup(
     name="biztrip-agent",
     version="0.1.2",
-    description="Personal business trip email scanner and reimbursement report generator.",
+    description="Local-first agent for verified business-trip reimbursement packages.",
     packages=find_packages(include=["biztrip_agent*", "common*", "phase1*", "phase2*"]),
     python_requires=">=3.8",
     install_requires=[
@@ -16,7 +16,6 @@ setup(
         "openai>=1.0.0",
     ],
     extras_require={
-        "llm": [],
         "test": ["pytest>=8.0.0"],
     },
     entry_points={

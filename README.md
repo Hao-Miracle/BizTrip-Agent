@@ -21,8 +21,8 @@ BizTrip 会在本地收集凭证、识别费用、归并出差行程；发现缺
 </p>
 
 <p>
-  <a href="https://github.com/Hao-Miracle/BizTrip-Agent/releases">
-    <img src="https://img.shields.io/github/v/release/Hao-Miracle/BizTrip-Agent?style=flat-square" alt="release">
+  <a href="https://github.com/Hao-Miracle/BizTrip-Agent/actions/workflows/tests.yml">
+    <img src="https://github.com/Hao-Miracle/BizTrip-Agent/actions/workflows/tests.yml/badge.svg" alt="tests">
   </a>
   <img src="https://img.shields.io/badge/local--first-private-137333?style=flat-square" alt="local first">
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="license">
@@ -32,6 +32,20 @@ BizTrip 会在本地收集凭证、识别费用、归并出差行程；发现缺
 </p>
 
 </div>
+
+---
+
+## 实际效果
+
+以下截图由项目自带的虚构 Demo 数据生成，不包含真实邮箱、员工或票据信息。
+
+### 核验后的报销结果
+
+![BizTrip Agent 报销审阅报告](docs/assets/review-demo.png)
+
+### 本地工作台
+
+![BizTrip Agent 本地工作台](docs/assets/workbench-demo.png)
 
 ---
 
@@ -130,13 +144,13 @@ Excel 包含：
 
 当前提供未签名的 Windows 测试版，双击后打开本地 Web 工作台，不需要安装 Python 或 Git。它用于公开测试，不是未来唯一的产品形态。
 
-查看 [Windows 测试版说明](docs/windows-one-click.md)。Windows SmartScreen 可能要求用户确认运行。
+[下载最新构建](https://github.com/Hao-Miracle/BizTrip-Agent/actions/workflows/windows-build.yml) · [查看 Windows 测试版说明](docs/windows-one-click.md)。Windows SmartScreen 可能要求用户确认运行。
 
 ### macOS
 
 当前提供未签名、未公证的 macOS 测试版。下载并解压后打开 `BizTrip-Agent-Mac.app`，无需安装 Python 或 Git。
 
-查看 [macOS 测试版说明](docs/macos-test.md)。首次运行需要在 Finder 中按住 Control 点击应用并确认打开。
+[下载最新构建](https://github.com/Hao-Miracle/BizTrip-Agent/actions/workflows/macos-build.yml) · [查看 macOS 测试版说明](docs/macos-test.md)。首次运行需要在 Finder 中按住 Control 点击应用并确认打开。
 
 ### Linux 和开发者
 
@@ -237,9 +251,9 @@ BizTrip-Agent/
 
 不会。系统只读取邮件，不发送、不删除、不修改。
 
-**为什么问题未解决时没有 Excel？**
+**为什么问题未解决时没有最终报销包？**
 
-因为一份错误但看似完整的报销表比没有结果更危险。需要确认的问题解决后才生成报销包。
+因为一份错误但看似完整的报销表比没有结果更危险。系统会保留内部审阅材料以便解决问题，但只有核验通过后才交付最终报销包。
 
 **Windows 和 macOS 测试版需要另外购买模型额度吗？**
 
@@ -251,8 +265,8 @@ BizTrip 不销售或加价转售模型额度。测试用户使用自己选择的
 
 ## 参与项目
 
-- [报告问题](../../issues/new?template=bug_report.md)
-- [提出产品建议](../../issues/new?template=feature_request.md)
+- [报告问题](https://github.com/Hao-Miracle/BizTrip-Agent/issues/new?template=bug_report.md)
+- [提出产品建议](https://github.com/Hao-Miracle/BizTrip-Agent/issues/new?template=feature_request.md)
 - [查看更新日志](CHANGELOG.md)
 - [阅读贡献指南](CONTRIBUTING.md)
 

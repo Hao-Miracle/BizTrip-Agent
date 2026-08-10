@@ -105,7 +105,7 @@ def install_engine(target):
     )
     python = venv_python(target)
     subprocess.run(
-        [str(python), "-m", "pip", "install", "-e", f"{target}[llm]"],
+        [str(python), "-m", "pip", "install", "-e", str(target)],
         cwd=target,
         check=True,
         stdout=subprocess.DEVNULL,

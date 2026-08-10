@@ -73,7 +73,7 @@ IMAP 服务器可留空自动推断，也可以手动填 `imap.qq.com`。
 
 两种方式：
 1. 自己改代码：在 `phase1/classify_emails.py` 的 `DOMAIN_RULES` 加域名，在 `phase1/extract_emails.py` 加提取逻辑
-2. 提 Issue：把邮件转发给我们（脱敏后），我们来加
+2. 提 Issue：描述平台和邮件格式，只附脱敏后的字段特征或虚构样本，不上传原始邮件和票据
 
 ### Q: 数据存在哪里？
 
@@ -116,10 +116,10 @@ MIT 协议，完全可以商用。但请遵守 MIT 协议要求：保留版权�
 
 ### Q: 怎么联系作者？
 
-- GitHub Issues：报告 Bug / 提建议
-- GitHub Discussions：交流讨论
+- [GitHub Issues](https://github.com/Hao-Miracle/BizTrip-Agent/issues/new)：报告 Bug / 提建议
+- [GitHub Discussions](https://github.com/Hao-Miracle/BizTrip-Agent/discussions)：交流讨论
 - 邮件：miracle.hao2023@gmail.com
 
 ---
 
-没找到你的问题？欢迎 [提交 Issue](../../issues/new) 或 [发起讨论](../../discussions)。
+没找到你的问题？欢迎 [提交 Issue](https://github.com/Hao-Miracle/BizTrip-Agent/issues/new) 或 [发起讨论](https://github.com/Hao-Miracle/BizTrip-Agent/discussions)。

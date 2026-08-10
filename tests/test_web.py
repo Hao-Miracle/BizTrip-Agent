@@ -39,6 +39,7 @@ def test_web_home_contains_local_workflows(monkeypatch, tmp_path):
     html = render_home()
 
     assert "BizTrip Agent" in html
+    assert "配置与报销文件保存在本机" in html
     assert 'action="/demo"' in html
     assert 'action="/rebuild"' not in html
     assert 'action="/scan"' in html

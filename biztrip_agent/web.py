@@ -331,7 +331,7 @@ def render_home(message=None, error=None, files=None, result_summary=None):
 <body>
   <header>
     <h1>BizTrip Agent</h1>
-    <div class="sub">本地报表工作台，只处理你电脑上的文件。</div>
+    <div class="sub">本地报销工作台，配置与报销文件保存在本机。</div>
   </header>
   <main>
     {message_html}
