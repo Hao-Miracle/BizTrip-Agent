@@ -270,17 +270,15 @@ LLM_MODEL=qwen2.5:7b
 
 ---
 
-## 🧩 Agent Skills（多平台支持）
+## 🧩 Agent Skill
 
-项目内置 5 个 AI Agent Skill，不绑定任何特定 IDE。`skills/` 目录下的 `.md` 文件是通用格式，**Claude Code、Cursor、GitHub Copilot、Windsurf、TRAE IDE** 等均可使用。
+项目提供一个开源薄 Skill：[`biztrip-reimbursement`](skills/biztrip-reimbursement/SKILL.md)。安装到支持 Skill 的 Agent 后，可以直接说：
 
-| Skill | 功能 | 依赖 |
-|-------|------|------|
-| **fetch-emails** | IMAP 连接邮箱，获取邮件列表 | `python-dotenv` |
-| **classify-emails** | 域名+关键词双规则分类差旅邮件 | `python-dotenv` |
-| **extract-emails** | 多平台解析器，提取结构化信息 | `python-dotenv PyPDF2` |
-| **generate-report** | 全链路 → 三 Sheet Excel + 附件归档 | `python-dotenv PyPDF2 openpyxl` |
-| **agent-report** | LLM 增强版：智能分类+提取+出差聚合 | 以上全部 + `openai` |
+> 帮我整理 7 月的差旅报销。
+
+Skill 只负责理解时间范围、调用本地引擎、询问待确认信息和交付结果。邮箱读取、附件解析、金额核验和报销包生成仍由本地确定性引擎完成；Skill 不读取或展示邮箱授权码和 API Key。
+
+旧版分步骤 Skill 暂时保留用于兼容，不建议新用户使用。
 
 > 详细使用说明见 [Agent Skills 文档](docs/skills.md)
 
@@ -300,7 +298,7 @@ BizTrip-Agent/
 │   ├── llm_extract.py       LLM 专用提取 + 正则降级
 │   ├── llm_aggregate.py     LLM 出差聚合 + 规则兜底
 │   └── agent_report.py      Agent 主入口
-├── skills/             ← 通用 Agent Skill（.md 格式）
+├── skills/             ← 开源薄 Skill + 旧版兼容说明
 ├── .trae/skills/       ← TRAE IDE 专用 Skill
 ├── docs/               ← 使用文档
 ├── wiki/               ← 知识库（产品/架构/决策/规格）
