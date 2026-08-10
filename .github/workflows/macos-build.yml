@@ -1,0 +1,75 @@
+name: macOS Test Build
+
+on:
+  pull_request:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-macos:
+    name: Build macOS App (${{ matrix.label }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-latest
+            label: Apple-Silicon
+          - runner: macos-15-intel
+            label: Intel
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install application and packager
+        run: python -m pip install -e ".[test]" pyinstaller
+
+      - name: Run tests
+        run: python -m pytest
+
+      - name: Build macOS application
+        run: pyinstaller --clean --noconfirm biztrip_macos.spec
+
+      - name: Smoke test application exists
+        run: |
+          test -d "dist/BizTrip-Agent-Mac.app"
+          test -x "dist/BizTrip-Agent-Mac.app/Contents/MacOS/BizTrip-Agent-Mac"
+
+      - name: Smoke test packaged server
+        run: |
+          export BIZTRIP_DATA_DIR="$RUNNER_TEMP/biztrip-data"
+          export BIZTRIP_OUTPUT_DIR="$RUNNER_TEMP/biztrip-output"
+          export BIZTRIP_ENV_PATH="$RUNNER_TEMP/biztrip-data/.env"
+          export BIZTRIP_NO_OPEN_BROWSER=1
+          export BIZTRIP_PORT=8876
+          "dist/BizTrip-Agent-Mac.app/Contents/MacOS/BizTrip-Agent-Mac" &
+          app_pid=$!
+          trap 'kill $app_pid 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --max-time 1 "http://127.0.0.1:$BIZTRIP_PORT/" | grep -q "Agent 模型"; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat "$BIZTRIP_DATA_DIR/biztrip-agent.log" || true
+          exit 1
+
+      - name: Package test application
+        run: ditto -c -k --sequesterRsrc --keepParent "dist/BizTrip-Agent-Mac.app" "dist/BizTrip-Agent-Mac-${{ matrix.label }}.zip"
+
+      - name: Upload macOS test package
+        uses: actions/upload-artifact@v4
+        with:
+          name: BizTrip-Agent-Mac-${{ matrix.label }}
+          path: dist/BizTrip-Agent-Mac-${{ matrix.label }}.zip
+          if-no-files-found: error
+          retention-days: 14

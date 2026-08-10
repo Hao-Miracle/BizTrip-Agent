@@ -2,6 +2,7 @@
 
 import io
 import json
+import os
 from contextlib import redirect_stdout
 from pathlib import Path
 
@@ -20,7 +21,7 @@ def start_task(start=None, end=None, count=60, no_llm=False, output_dir="output"
             return _failure(
                 "start",
                 "setup_required",
-                "请先在本地 Web 页面完成邮箱账号和授权码配置。",
+                "请先在本地 Web 页面完成邮箱和 Agent 模型配置。",
             )
         with redirect_stdout(io.StringIO()):
             result = run_agent(
@@ -175,4 +176,10 @@ def _account_configured():
     from common.utils import get_email_config
 
     account, password, _server, _port = get_email_config()
-    return bool(account and password)
+    return bool(
+        account
+        and password
+        and os.getenv("LLM_API_KEY")
+        and os.getenv("LLM_BASE_URL")
+        and os.getenv("LLM_MODEL")
+    )

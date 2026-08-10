@@ -13,9 +13,10 @@ setup(
         "python-dotenv>=1.0.0",
         "PyPDF2>=3.0.0",
         "openpyxl>=3.1.0",
+        "openai>=1.0.0",
     ],
     extras_require={
-        "llm": ["openai>=1.0.0"],
+        "llm": [],
         "test": ["pytest>=8.0.0"],
     },
     entry_points={

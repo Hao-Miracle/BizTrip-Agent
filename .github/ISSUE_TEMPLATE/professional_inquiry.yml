@@ -1,0 +1,54 @@
+name: 专业版 / 企业版申请
+description: 咨询付费部署、制度接入、私有化或团队能力
+title: "[专业版] "
+labels: ["professional-inquiry"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请用此表单说明你希望解决的业务问题，用于评估付费部署、企业报销制度、团队流程或系统对接。
+        请勿填写邮箱密码、授权码、API Key、发票文件、员工姓名或其他敏感信息。
+  - type: dropdown
+    id: need
+    attributes:
+      label: 核心需求
+      options:
+        - 付费部署和技术支持
+        - 企业报销制度校验
+        - OA / ERP / 财务系统对接
+        - 团队和多用户工作流
+        - 私有化部署
+        - 其他专业服务
+    validations:
+      required: true
+  - type: dropdown
+    id: scale
+    attributes:
+      label: 预计用户规模
+      options:
+        - 1-10
+        - 11-50
+        - 51-200
+        - 201+
+        - 暂不确定
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: 希望达成的业务结果
+      description: 说明当前流程和期望结果，不要附带保密资料。
+    validations:
+      required: true
+  - type: input
+    id: timeline
+    attributes:
+      label: 期望时间
+      placeholder: 例如：希望一个月内上线
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: 隐私确认
+      options:
+        - label: 我没有填写密码、授权码、API Key、发票或员工个人信息。
+          required: true

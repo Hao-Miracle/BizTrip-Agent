@@ -10,7 +10,7 @@
 |------|------|
 | **Python** | ≥ 3.8 |
 | **邮箱** | 已开启 IMAP 服务，并获取授权码/应用专用密码 |
-| **LLM API Key（可选）** | 如需 AI 增强功能，准备兼容 OpenAI 协议的 API Key |
+| **模型接口** | 准备兼容 OpenAI 协议的接口地址、API Key 和模型名称 |
 
 如果不确定电脑有没有 Python：
 
@@ -52,13 +52,17 @@ Windows 测试人员优先使用一键版，无需安装 Python 和 Git：
 
 详细步骤见 [Windows 一键测试版](windows-one-click.md)。
 
+### macOS 一键测试版
+
+macOS 测试人员可以从 GitHub Actions 的 **macOS Test Build** 下载 Apple Silicon 或 Intel 对应的构建产物，解压后打开应用。当前版本尚未签名和公证，详细步骤见 [macOS 一键测试版](macos-test.md)。
+
 ### 一条命令安装并启动
 
 ```bash
 git clone https://github.com/Hao-Miracle/BizTrip-Agent.git && cd BizTrip-Agent && python3 start.py
 ```
 
-这条命令会自动创建本地运行环境并安装项目需要的 Python 依赖，包括 `python-dotenv`、`PyPDF2`、`openpyxl` 和本地 `biztrip` 命令。它不会自动安装 Python 本身，也不会替你开启邮箱 IMAP 或生成邮箱授权码。
+这条命令会自动创建本地运行环境并安装项目需要的 Python 依赖，包括模型客户端和本地 `biztrip` 命令。它不会自动安装 Python 本身，也不会替你开启邮箱 IMAP 或生成邮箱授权码。
 
 ### 下载 ZIP
 
@@ -76,13 +80,7 @@ python3 -m venv .venv
 .venv/bin/biztrip web
 ```
 
-### LLM 增强依赖（可选）
-
-普通报销扫描不需要安装 `openai`。只有启用 LLM 增强时才需要：
-
-```bash
-.venv/bin/python -m pip install -e ".[llm]"
-```
+模型客户端已经包含在所有安装方式中，不需要单独安装增强包。
 
 ---
 
@@ -102,9 +100,9 @@ python3 start.py
 
 系统会按邮箱地址自动选择 IMAP 服务器，并把配置保存在本机 `.env` 文件中。普通用户不需要手动编辑 `.env`。
 
-### （可选）配置 LLM
+### 配置 Agent 模型
 
-普通报销扫描不需要 LLM。想启用增强识别时，在 Web 页面展开“LLM 增强配置”，填写接口地址、API Key 和模型名称。配置后不需要进入对话窗口，点击“开始生成”时系统会自动调用 LLM 辅助分类、提取和行程聚合。
+所有版本都使用 Agent 模型完成邮件理解和行程判断。用户在 Web 页面填写自己的接口地址、API Key 和模型名称；点击“开始生成”时自动调用，不需要另开对话窗口。规则引擎只在模型失败或证据不足时兜底。
 
 | 字段 | 示例 |
 |------|------|
@@ -141,7 +139,7 @@ biztrip demo --review
 
 A: 缺少依赖，重新安装：
 ```bash
-pip install python-dotenv PyPDF2 openpyxl
+pip install python-dotenv PyPDF2 openpyxl openai
 ```
 
 ### Q: 连接邮箱失败

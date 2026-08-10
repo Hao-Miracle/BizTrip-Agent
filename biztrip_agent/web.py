@@ -424,9 +424,9 @@ def readiness_status(project_dir=None):
             "detail": "已填写" if env_values.get("EMAIL_PASSWORD") else "未填写",
         },
         {
-            "label": "LLM 增强",
+            "label": "Agent 模型",
             "state": "ok" if env_values.get("LLM_API_KEY") else "warn",
-            "detail": "已启用" if env_values.get("LLM_API_KEY") else "未启用，将使用规则模式",
+            "detail": "已配置" if env_values.get("LLM_API_KEY") else "待配置接口地址和 API Key",
         },
     ]
 
@@ -436,7 +436,7 @@ def _dependency_status():
         ("python-dotenv", "dotenv", True),
         ("PyPDF2", "PyPDF2", True),
         ("openpyxl", "openpyxl", True),
-        ("openai", "openai", False),
+        ("openai", "openai", True),
     ]
     rows = []
     for package_name, module_name, required in packages:
@@ -596,7 +596,7 @@ def _run_account(form):
     error = _save_simple_config(form)
     if error:
         return render_home(error=error)
-    return render_home(message="账号已保存。以后只需要选择扫描范围。")
+    return render_home(message="邮箱已保存。继续配置 Agent 模型接口后即可开始。")
 
 
 def _scan_job(args, output_dir):
@@ -686,6 +686,12 @@ def _preflight_scan(output_dir):
         return "请先在 .env 中填写 EMAIL_ACCOUNT。"
     if not env_flags.get("EMAIL_PASSWORD"):
         return "请先在 .env 中填写邮箱授权码 EMAIL_PASSWORD。"
+    if not env_flags.get("LLM_API_KEY"):
+        return "请先配置 Agent 模型 API Key。"
+    if not env_flags.get("LLM_BASE_URL"):
+        return "请先配置 Agent 模型接口地址。"
+    if not env_flags.get("LLM_MODEL"):
+        return "请先配置 Agent 模型名称。"
     output_path = Path(output_dir)
     try:
         output_path.mkdir(parents=True, exist_ok=True)
@@ -804,7 +810,7 @@ def _run_open_output():
 def _shutdown_html():
     return """<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>BizTrip Agent 已停止</title></head>
 <body style="font-family:Segoe UI,Microsoft YaHei,sans-serif;padding:40px;color:#202124">
-<h1>BizTrip Agent 已安全停止</h1><p>现在可以关闭这个页面。再次使用时，双击 BizTrip-Agent-Windows.exe。</p></body></html>"""
+<h1>BizTrip Agent 已安全停止</h1><p>现在可以关闭这个页面。再次使用时，重新打开 BizTrip Agent。</p></body></html>"""
 
 
 def _latest_files(output_dir):
@@ -1175,9 +1181,15 @@ def _readiness_html(statuses):
 def _config_html():
     values = _read_env_values(_env_path())
     account = values.get("EMAIL_ACCOUNT", "")
-    configured = bool(account and values.get("EMAIL_PASSWORD"))
+    account_configured = bool(account and values.get("EMAIL_PASSWORD"))
+    configured = bool(
+        account_configured
+        and values.get("LLM_API_KEY")
+        and values.get("LLM_BASE_URL")
+        and values.get("LLM_MODEL")
+    )
     onboarding_html = _onboarding_html(values, configured)
-    account_html = _account_html(values, account, configured)
+    account_html = _account_html(values, account, account_configured)
     scan_html = _scan_html(configured)
     llm_html = _llm_config_html(values)
     return f"""
@@ -1187,11 +1199,12 @@ def _config_html():
       {account_html}
     </section>
     <section class="config">
-      <h2>生成报销包</h2>
-      {scan_html}
+      <h2>Agent 模型</h2>
+      {llm_html}
     </section>
     <section class="config">
-      {llm_html}
+      <h2>生成报销包</h2>
+      {scan_html}
     </section>
 """
 
@@ -1199,6 +1212,18 @@ def _config_html():
 def _onboarding_html(values, configured):
     if configured:
         return ""
+    if values.get("EMAIL_ACCOUNT") and values.get("EMAIL_PASSWORD"):
+        return """
+    <section class="config">
+      <h2>启用 Agent</h2>
+      <div class="sub">邮箱已经准备好。继续配置你自己的模型接口，系统才会开始正式任务。</div>
+      <ol class="steps">
+        <li>从兼容 OpenAI 协议的模型服务获取 API Key。</li>
+        <li>填写接口地址、API Key 和模型名称。</li>
+        <li>保存后选择报销时间，Agent 会自动完成识别和核验。</li>
+      </ol>
+    </section>
+"""
     email = values.get("EMAIL_ACCOUNT", "")
     provider_hint = _provider_setup_hint(email)
     provider_rows = "".join(
@@ -1278,7 +1303,7 @@ def _account_form(values, submit_label):
 def _scan_html(configured):
     disabled = "" if configured else " disabled"
     output_dir = html.escape(str(_default_output_dir()))
-    hint = "填写这次要报销的时间范围，系统会生成 Excel 和审阅页。" if configured else "请先保存邮箱账号和授权码。"
+    hint = "填写这次要报销的时间范围，Agent 会生成经过核验的报销包。" if configured else "请先完成邮箱和 Agent 模型配置。"
     return f"""
       <div class="sub">{hint}</div>
       <form method="post" action="/scan" data-background="true">
@@ -1318,7 +1343,6 @@ def _scan_html(configured):
             </div>
           </div>
           <label class="check"><input name="review" type="checkbox" checked{disabled}> 同时生成审阅页面</label>
-          <label class="check"><input name="no_llm" type="checkbox"{disabled}> 只用规则模式</label>
           <button type="submit"{disabled}>开始生成</button>
         </form>
       </details>
@@ -1327,15 +1351,12 @@ def _scan_html(configured):
 
 def _llm_config_html(values):
     llm_enabled = bool(values.get("LLM_API_KEY"))
-    llm_status = "已启用。点击开始生成时自动调用；没有单独对话窗口，失败时自动回到规则模式。" if llm_enabled else "可选。不配置也能使用规则模式；配置后点击开始生成时自动调用，没有单独对话窗口。"
+    llm_status = "已配置。每次任务都会自动调用；规则引擎只在模型失败或证据不足时兜底。" if llm_enabled else "填写你自己的接口地址和 API Key。低成本模型即可完成大多数邮件识别任务。"
     return f"""
-      <details>
-        <summary>LLM 增强配置</summary>
-        <div class="sub">{html.escape(llm_status)}</div>
-        <div class="sub">配置后点击“开始生成”时，系统会自动用 LLM 辅助分类、提取和行程聚合。</div>
-        <form method="post" action="/config">
-          <input name="EMAIL_ACCOUNT" type="hidden" value="{html.escape(values.get("EMAIL_ACCOUNT", ""))}">
-          <input name="EMAIL_IMAP_SERVER" type="hidden" value="{html.escape(values.get("EMAIL_IMAP_SERVER", ""))}">
+      <div class="sub">{html.escape(llm_status)}</div>
+      <div class="sub">云端模型会接收必要的邮件和票据文本；需要数据完全留在本机时，请填写本地模型接口。</div>
+      <form method="post" action="/config">
+        <div class="config-grid">
           <div>
             <label for="llm-base">接口地址</label>
             <input id="llm-base" name="LLM_BASE_URL" type="text" value="{html.escape(values.get("LLM_BASE_URL", ""))}" placeholder="https://api.deepseek.com/v1">
@@ -1348,9 +1369,9 @@ def _llm_config_html(values):
             <label for="llm-model">模型名称</label>
             <input id="llm-model" name="LLM_MODEL" type="text" value="{html.escape(values.get("LLM_MODEL", ""))}" placeholder="deepseek-chat">
           </div>
-          <button type="submit">保存 LLM 配置</button>
-        </form>
-      </details>
+        </div>
+        <button type="submit">保存 Agent 模型</button>
+      </form>
 """
 
 
