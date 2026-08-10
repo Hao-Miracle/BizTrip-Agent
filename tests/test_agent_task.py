@@ -208,6 +208,55 @@ def test_verified_llm_evidence_is_used_after_rule_tools_fail():
     assert actions[-1]["source"] == "verified_quote"
 
 
+def test_amount_recovery_refreshes_total_without_rebuilding_trip_groups():
+    record = {
+        "分类": "发票",
+        "金额": "",
+        "日期": "2026-08-03",
+        "供应商": "测试供应商",
+        "附件": "invoice.pdf",
+    }
+    trips = [{"trip_id": 1, "records": [record], "total": 0}]
+    builder_calls = []
+    refresher_calls = []
+
+    recovered_trips, _initial, _actions = run_recovery_loop(
+        [record],
+        trips,
+        attachment_recoverer=lambda items: items[0].update({"金额": 88.0}),
+        trip_builder=lambda items: builder_calls.append(items) or [],
+        trip_refresher=lambda items: refresher_calls.append(items) or [
+            {**trip, "total": sum(row.get("金额", 0) or 0 for row in trip["records"])}
+            for trip in items
+        ],
+    )
+
+    assert builder_calls == []
+    assert len(refresher_calls) == 1
+    assert recovered_trips[0]["total"] == 88.0
+
+
+def test_date_recovery_rebuilds_trip_groups():
+    record = {
+        "分类": "发票",
+        "金额": 88.0,
+        "日期": "",
+        "开票日期": "2026-08-03",
+        "供应商": "测试供应商",
+        "附件": "invoice.pdf",
+    }
+    builder_calls = []
+
+    run_recovery_loop(
+        [record],
+        [],
+        trip_builder=lambda items: builder_calls.append(items) or [],
+        trip_refresher=lambda items: items,
+    )
+
+    assert len(builder_calls) == 1
+
+
 def test_unassigned_trip_question_contains_existing_trip_choices():
     assigned = {
         "记录ID": "R0001",

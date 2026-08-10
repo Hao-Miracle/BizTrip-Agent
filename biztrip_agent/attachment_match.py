@@ -10,7 +10,7 @@ SUPPORTED_SUFFIXES = {".pdf", ".zip", ".jpg", ".jpeg", ".png", ".heic"}
 IDENTIFIER_FIELDS = ("订单号", "发票号码", "发票号")
 
 
-def find_unlinked_attachment(record, records, attachment_dir):
+def find_unlinked_attachment(record, records, attachment_dir, text_reader=None):
     """Return one uniquely supported attachment candidate, otherwise None."""
     attachment_dir = Path(attachment_dir)
     if not attachment_dir.exists():
@@ -25,7 +25,7 @@ def find_unlinked_attachment(record, records, attachment_dir):
     for path in attachment_dir.iterdir():
         if not path.is_file() or path.suffix.lower() not in SUPPORTED_SUFFIXES or path.name in used:
             continue
-        evidence = f"{path.name}\n{_attachment_text(path)}"
+        evidence = f"{path.name}\n{(text_reader or _attachment_text)(path)}"
         match = _match_evidence(record, evidence)
         if match:
             candidates.append({"attachment": path.name, **match})

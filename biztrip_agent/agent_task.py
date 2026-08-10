@@ -86,6 +86,7 @@ def run_recovery_loop(
     attachment_recoverer=None,
     vendor_resolver=None,
     trip_builder=None,
+    trip_refresher=None,
     evidence_resolver=None,
     attachment_matcher=None,
     max_rounds=2,
@@ -102,6 +103,7 @@ def run_recovery_loop(
             break
 
         changed = False
+        round_actions = []
         for item in planned:
             attempted.add((item["record_index"], item["tool"]))
             action = _execute_recovery(
@@ -113,22 +115,37 @@ def run_recovery_loop(
             )
             action["round"] = round_number
             actions.append(action)
+            round_actions.append(action)
             changed = changed or action["result"] == "recovered"
 
         if not changed:
             break
-        if trip_builder:
-            trips = trip_builder(records)
+        trips = _refresh_recovered_trips(
+            records, trips, round_actions, trip_builder, trip_refresher
+        )
         validation = validate_reimbursement(records, trips)
 
     evidence_actions = _resolve_with_evidence(records, validation, evidence_resolver)
     actions.extend(evidence_actions)
     if any(action["result"] == "recovered" for action in evidence_actions):
-        if trip_builder:
-            trips = trip_builder(records)
+        trips = _refresh_recovered_trips(
+            records, trips, evidence_actions, trip_builder, trip_refresher
+        )
         validation = validate_reimbursement(records, trips)
 
     return trips, initial_validation, actions
+
+
+def _refresh_recovered_trips(records, trips, actions, trip_builder, trip_refresher):
+    recovered_fields = {
+        action.get("field") for action in actions if action.get("result") == "recovered"
+    }
+    grouping_changed = bool(recovered_fields.intersection({"日期", "出发地", "目的地"}))
+    if trip_builder and (grouping_changed or trip_refresher is None):
+        return trip_builder(records)
+    if trip_refresher:
+        return trip_refresher(trips)
+    return trips
 
 
 def recover_record_fields(records, attachment_recoverer=None, vendor_resolver=None):

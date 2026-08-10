@@ -138,6 +138,11 @@ def apply_manual_trip_assignments(trips, records):
         if trip is not None:
             trip.setdefault('records', []).append(record)
 
+    return refresh_trip_totals(trips)
+
+
+def refresh_trip_totals(trips):
+    """Refresh totals without asking the LLM to rebuild unchanged trip groups."""
     for trip in trips:
         trip['total'] = sum(record.get('金额', 0) or 0 for record in trip.get('records', []))
     return trips

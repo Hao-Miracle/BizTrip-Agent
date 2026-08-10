@@ -138,9 +138,11 @@ def render_home(message=None, error=None, files=None, result_summary=None):
     readiness_html = _readiness_html(readiness_status())
     config_html = _config_html()
     show_saved_results = account_ready and not _using_temporary_env()
+    saved_result = _latest_result_payload(_default_output_dir()) if show_saved_results else None
     recent_html = _recent_results_html() if show_saved_results else ""
-    summary_html = _summary_html(result_summary) if result_summary or show_saved_results else ""
-    resolution_html = _agent_resolution_html() if show_saved_results else ""
+    saved_summary = _result_summary(payload_result=saved_result) if saved_result else None
+    summary_html = _summary_html(result_summary or saved_summary) if result_summary or saved_summary else ""
+    resolution_html = _agent_resolution_html(payload_result=saved_result) if saved_result else ""
     return f"""<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -816,14 +818,22 @@ def _latest_files(output_dir):
     return sorted(files, key=lambda path: path.stat().st_mtime, reverse=True)[:6]
 
 
-def _result_summary(output_dir):
-    records = _latest_records_json(output_dir)
-    if not records:
+def _latest_result_payload(output_dir):
+    records_path = _latest_records_json(output_dir)
+    if not records_path:
         return None
     try:
-        payload = json.loads(records.read_text(encoding="utf-8"))
+        payload = json.loads(records_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return None
+    return records_path, payload
+
+
+def _result_summary(output_dir=None, payload_result=None):
+    payload_result = payload_result or _latest_result_payload(output_dir)
+    if not payload_result:
+        return None
+    records, payload = payload_result
     summary = payload.get("summary", {})
     return {
         "record_count": summary.get("record_count", 0),
@@ -839,14 +849,11 @@ def _result_summary(output_dir):
     }
 
 
-def _agent_resolution_html(output_dir=None):
-    records_path = _latest_records_json(output_dir or _default_output_dir())
-    if not records_path:
+def _agent_resolution_html(output_dir=None, payload_result=None):
+    payload_result = payload_result or _latest_result_payload(output_dir or _default_output_dir())
+    if not payload_result:
         return ""
-    try:
-        payload = json.loads(records_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return ""
+    records_path, payload = payload_result
     questions = payload.get("agent_task", {}).get("questions", [])
     editable = {
         "missing_amount",
@@ -956,6 +963,10 @@ def _run_resolve(form):
     if not latest or requested.resolve() != latest.resolve():
         return render_home(error="任务结果已经变化，请刷新页面后重新确认。")
 
+    payload_result = _latest_result_payload(latest.parent)
+    if not payload_result or payload_result[0].resolve() != latest.resolve():
+        return render_home(error="无法读取当前任务，请刷新后重试。")
+    current_payload = payload_result[1]
     answers = {}
     saved_uploads = []
     for key, value in form.items():
@@ -968,7 +979,9 @@ def _run_resolve(form):
         issue_code = parts[2]
         if isinstance(value, dict) and "data" in value:
             try:
-                saved_name, saved_path = _save_uploaded_attachment(value, latest, index, issue_code)
+                saved_name, saved_path = _save_uploaded_attachment(
+                    value, latest, index, issue_code, payload=current_payload
+                )
             except ValueError as exc:
                 return render_home(error=str(exc))
             answers[(index, issue_code)] = saved_name
@@ -1013,13 +1026,14 @@ def _parse_post_form(content_type, body):
     return form
 
 
-def _save_uploaded_attachment(upload, records_path, record_index, issue_code):
+def _save_uploaded_attachment(upload, records_path, record_index, issue_code, payload=None):
     if issue_code not in {"missing_attachment", "unreadable_attachment"}:
         raise ValueError("这个问题不接受文件上传。")
-    try:
-        payload = json.loads(records_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise ValueError("无法读取当前任务，请刷新后重试。") from exc
+    if payload is None:
+        try:
+            payload = json.loads(records_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ValueError("无法读取当前任务，请刷新后重试。") from exc
     allowed = any(
         int(question.get("record_index", 0)) == record_index
         and issue_code in question.get("issue_codes", [])

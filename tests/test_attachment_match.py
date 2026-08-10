@@ -1,4 +1,5 @@
 from biztrip_agent.attachment_match import find_unlinked_attachment
+from phase2.agent_report import _cached_attachment_matcher
 
 
 def test_matches_unlinked_attachment_by_exact_identifier(tmp_path):
@@ -42,3 +43,19 @@ def test_rejects_ambiguous_or_already_used_candidates(tmp_path):
     (tmp_path / "B_ORDER-8899.pdf").unlink()
     used = {"订单号": "OTHER", "附件": "A_ORDER-8899.pdf"}
     assert find_unlinked_attachment(record, [record, used], tmp_path) is None
+
+
+def test_cached_matcher_parses_each_candidate_once_per_run(tmp_path, monkeypatch):
+    path = tmp_path / "invoice.pdf"
+    path.write_bytes(b"not-a-real-pdf")
+    calls = []
+    monkeypatch.setattr(
+        "biztrip_agent.attachment_match._attachment_text",
+        lambda candidate: calls.append(candidate) or "ORDER-8899",
+    )
+    record = {"订单号": "ORDER-8899", "附件": ""}
+    matcher = _cached_attachment_matcher(tmp_path)
+
+    assert matcher(record, [record])["attachment"] == "invoice.pdf"
+    assert matcher(record, [record])["attachment"] == "invoice.pdf"
+    assert calls == [path]

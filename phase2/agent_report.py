@@ -129,7 +129,7 @@ def infer_vendor(record):
     return sender_name or '其他'
 
 
-def enrich_records_from_attachments(records, output_dir=OUTPUT_DIR):
+def enrich_records_from_attachments(records, output_dir=OUTPUT_DIR, text_reader=None):
     """Backfill fields that can be recovered from archived attachments."""
     attach_dir = os.path.join(str(output_dir), '附件')
     for record in records:
@@ -137,7 +137,11 @@ def enrich_records_from_attachments(records, output_dir=OUTPUT_DIR):
             continue
         if infer_vendor(record) != '12306':
             continue
-        text = _attachment_text(record.get('附件', ''), attach_dir)
+        text = (
+            text_reader(record.get('附件', ''))
+            if text_reader
+            else _attachment_text(record.get('附件', ''), attach_dir)
+        )
         amount = _fallback_12306_amount(text)
         if amount:
             record['金额'] = amount
@@ -187,6 +191,23 @@ def _fallback_12306_amount(text):
         if 1 <= value <= 5000:
             amounts.append(value)
     return max(amounts) if amounts else ''
+
+
+def _cached_attachment_matcher(attachment_dir):
+    from biztrip_agent.attachment_match import _attachment_text as read_attachment_text
+    from biztrip_agent.attachment_match import find_unlinked_attachment
+
+    cache = {}
+
+    def cached_read(path):
+        key = str(path.resolve())
+        if key not in cache:
+            cache[key] = read_attachment_text(path)
+        return cache[key]
+
+    return lambda record, records: find_unlinked_attachment(
+        record, records, attachment_dir, text_reader=cached_read
+    )
 
 
 def enrich_record(record, subject, sender, attachments, evidence_text=""):
@@ -332,27 +353,38 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
 
     # ===== Step 4: 首次核验 + 自动补救 =====
     from biztrip_agent.agent_task import run_recovery_loop
+    from phase2.llm_aggregate import refresh_trip_totals
+
+    attachment_text_cache = {}
+
+    def cached_attachment_text(attachment_value):
+        key = str(attachment_value or '')
+        if key not in attachment_text_cache:
+            attachment_text_cache[key] = _attachment_text(key, attach_dir)
+        return attachment_text_cache[key]
 
     trips = aggregate_trips(records, use_llm=use_llm)
-    from biztrip_agent.attachment_match import find_unlinked_attachment
     if use_llm:
         from phase2.llm_evidence import resolve_evidence
 
         evidence_resolver = lambda record, codes: resolve_evidence(
             record,
             codes,
-            attachment_text=_attachment_text(record.get('附件', ''), attach_dir),
+            attachment_text=cached_attachment_text(record.get('附件', '')),
         )
     else:
         evidence_resolver = None
     trips, initial_validation, recovery_actions = run_recovery_loop(
         records,
         trips,
-        attachment_recoverer=lambda items: enrich_records_from_attachments(items, output_dir=state_dir),
+        attachment_recoverer=lambda items: enrich_records_from_attachments(
+            items, output_dir=state_dir, text_reader=cached_attachment_text
+        ),
         vendor_resolver=infer_vendor,
         trip_builder=lambda items: aggregate_trips(items, use_llm=use_llm),
+        trip_refresher=refresh_trip_totals,
         evidence_resolver=evidence_resolver,
-        attachment_matcher=lambda record, items: find_unlinked_attachment(record, items, attach_dir),
+        attachment_matcher=_cached_attachment_matcher(attach_dir),
     )
 
     # ===== Step 5: 复核 + 建立可追溯的 Agent 任务状态 =====
