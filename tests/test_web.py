@@ -7,6 +7,7 @@ from http.server import ThreadingHTTPServer
 from biztrip_agent.cli import main
 from biztrip_agent.web import (
     BizTripWebHandler,
+    _agent_resolution_html,
     _friendly_error,
     _infer_imap_server,
     _env_path,
@@ -37,7 +38,7 @@ def test_web_home_contains_local_workflows(monkeypatch, tmp_path):
 
     assert "BizTrip Agent" in html
     assert 'action="/demo"' in html
-    assert 'action="/rebuild"' in html
+    assert 'action="/rebuild"' not in html
     assert 'action="/scan"' in html
     assert 'action="/init"' in html
     assert 'action="/config"' in html
@@ -57,7 +58,6 @@ def test_web_home_contains_local_workflows(monkeypatch, tmp_path):
     assert "提供商" not in html
     assert "准备状态" in html
     assert "诊断信息" in html
-    assert "records_YYYYMMDD_HHMMSS.json" in html
     assert "打开报销文件夹" in html
     assert "安全停止程序" in html
 
@@ -324,6 +324,23 @@ def test_summary_html_shows_submission_verdict():
     assert "2 条记录需要处理" in html
     assert "已识别金额" in html
     assert "待处理记录" in html
+
+
+def test_agent_resolution_html_shows_only_editable_open_fields(tmp_path):
+    (tmp_path / "records_20260810.json").write_text(
+        '{"agent_task":{"questions":[{"record_index":1,'
+        '"issue_codes":["missing_amount","missing_attachment"],'
+        '"prompt":"请确认金额并补充原件",'
+        '"context":{"主题":"电子发票"}}]}}',
+        encoding="utf-8",
+    )
+
+    page = _agent_resolution_html(tmp_path)
+
+    assert "Agent 需要你确认" in page
+    assert "电子发票" in page
+    assert 'name="answer_1_missing_amount"' in page
+    assert 'name="answer_1_missing_attachment"' not in page
 
 
 def test_friendly_error_maps_common_failures():

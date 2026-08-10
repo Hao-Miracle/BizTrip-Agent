@@ -84,6 +84,9 @@ class BizTripWebHandler(BaseHTTPRequestHandler):
         if self.path == "/config":
             self._send_html(_run_config(form))
             return
+        if self.path == "/resolve":
+            self._send_html(_run_resolve(form))
+            return
         if self.path == "/open-output":
             self._send_html(_run_open_output())
             return
@@ -130,6 +133,7 @@ def render_home(message=None, error=None, files=None, result_summary=None):
     show_saved_results = account_ready and not _using_temporary_env()
     recent_html = _recent_results_html() if show_saved_results else ""
     summary_html = _summary_html(result_summary) if result_summary or show_saved_results else ""
+    resolution_html = _agent_resolution_html() if show_saved_results else ""
     return f"""<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -183,7 +187,7 @@ def render_home(message=None, error=None, files=None, result_summary=None):
       font: inherit;
       background: #fff;
     }}
-    input[type="number"] {{
+    input[type="number"], input[type="date"] {{
       width: 100%;
       min-height: 38px;
       border: 1px solid var(--line);
@@ -324,6 +328,7 @@ def render_home(message=None, error=None, files=None, result_summary=None):
     {message_html}
     {files_html}
     {summary_html}
+    {resolution_html}
     {recent_html}
     <section id="job-panel" class="job">
       <h2>任务进度</h2>
@@ -827,6 +832,95 @@ def _result_summary(output_dir):
     }
 
 
+def _agent_resolution_html(output_dir=None):
+    records_path = _latest_records_json(output_dir or _default_output_dir())
+    if not records_path:
+        return ""
+    try:
+        payload = json.loads(records_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return ""
+    questions = payload.get("agent_task", {}).get("questions", [])
+    editable = {"missing_amount", "missing_date", "missing_vendor"}
+    issue_labels = {
+        "missing_amount": "请确认正确金额。",
+        "missing_date": "请确认发生日期。",
+        "missing_vendor": "请确认实际收款方。",
+    }
+    rows = []
+    for question in questions:
+        codes = [code for code in question.get("issue_codes", []) if code in editable]
+        if not codes:
+            continue
+        index = int(question.get("record_index", 0))
+        context = question.get("context", {})
+        title = context.get("主题") or context.get("分类") or f"第 {index} 条记录"
+        prompt = " ".join(issue_labels[code] for code in codes)
+        fields = []
+        if "missing_amount" in codes:
+            fields.append(
+                f'<label for="answer-{index}-amount">金额</label>'
+                f'<input id="answer-{index}-amount" name="answer_{index}_missing_amount" type="number" min="0.01" step="0.01">'
+            )
+        if "missing_date" in codes:
+            fields.append(
+                f'<label for="answer-{index}-date">日期</label>'
+                f'<input id="answer-{index}-date" name="answer_{index}_missing_date" type="date">'
+            )
+        if "missing_vendor" in codes:
+            fields.append(
+                f'<label for="answer-{index}-vendor">供应商</label>'
+                f'<input id="answer-{index}-vendor" name="answer_{index}_missing_vendor" type="text">'
+            )
+        rows.append(
+            '<div class="result-metric">'
+            f'<strong>{html.escape(str(title))}</strong>'
+            f'<span>{html.escape(prompt)}</span>'
+            f'{"".join(fields)}'
+            '</div>'
+        )
+    if not rows:
+        return ""
+    return (
+        '<section class="results">'
+        '<h2>Agent 需要你确认</h2>'
+        '<div class="sub">只填写你能确认的信息，留空的项目会继续保持待处理。</div>'
+        '<form method="post" action="/resolve">'
+        f'<input name="json_path" type="hidden" value="{html.escape(str(records_path.resolve()))}">'
+        f'<div class="result-grid">{"".join(rows)}</div>'
+        '<button type="submit">确认并重新核验</button>'
+        '</form>'
+        '</section>'
+    )
+
+
+def _run_resolve(form):
+    latest = _latest_records_json(_default_output_dir())
+    requested = Path(form.get("json_path", "")).expanduser()
+    if not latest or requested.resolve() != latest.resolve():
+        return render_home(error="任务结果已经变化，请刷新页面后重新确认。")
+
+    answers = {}
+    for key, value in form.items():
+        if not key.startswith("answer_"):
+            continue
+        parts = key.split("_", 2)
+        if len(parts) != 3 or not parts[1].isdigit():
+            continue
+        answers[(int(parts[1]), parts[2])] = value
+    try:
+        from biztrip_agent.resolution import resolve_results
+
+        result = resolve_results(latest, answers)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        return render_home(error=str(exc))
+    return render_home(
+        message="已采用你的确认并重新核验。",
+        files=[result["xlsx_path"], result["review_path"]],
+        result_summary=_result_summary(latest.parent),
+    )
+
+
 def _latest_records_json(output_dir=None):
     roots = [Path(output_dir)] if output_dir else [Path("output"), Path(__file__).resolve().parents[1] / "output"]
     files = []
@@ -1132,15 +1226,6 @@ def _tools_html():
             <h2>停止程序</h2>
             <div class="sub">完成测试后安全停止本地服务。</div>
             <button type="submit">安全停止程序</button>
-          </form>
-          <form method="post" action="/rebuild">
-            <h2>从 JSON 重建</h2>
-            <label for="json-path">records_YYYYMMDD_HHMMSS.json 路径</label>
-            <input id="json-path" name="json_path" type="text" placeholder="output/records_20260729_143022.json">
-            <label for="rebuild-output">输出目录</label>
-            <input id="rebuild-output" name="output_dir" type="text" placeholder="留空则输出到 JSON 所在目录">
-            <label class="check"><input name="review" type="checkbox" checked> 同时生成审阅页面</label>
-            <button type="submit">重建报表</button>
           </form>
         </div>
       </details>
