@@ -326,18 +326,16 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
         return
 
     # ===== Step 4: 首次核验 + 自动补救 =====
-    from biztrip_agent.agent_task import recover_record_fields
-    from biztrip_agent.validation import validate_reimbursement
+    from biztrip_agent.agent_task import run_recovery_loop
 
     trips = aggregate_trips(records, use_llm=use_llm)
-    initial_validation = validate_reimbursement(records, trips)
-    recovery_actions = recover_record_fields(
+    trips, initial_validation, recovery_actions = run_recovery_loop(
         records,
+        trips,
         attachment_recoverer=lambda items: enrich_records_from_attachments(items, output_dir=output_dir),
         vendor_resolver=infer_vendor,
+        trip_builder=lambda items: aggregate_trips(items, use_llm=use_llm),
     )
-    if recovery_actions:
-        trips = aggregate_trips(records, use_llm=use_llm)
 
     # ===== Step 5: 复核 + 建立可追溯的 Agent 任务状态 =====
     from biztrip_agent.agent_task import build_agent_task

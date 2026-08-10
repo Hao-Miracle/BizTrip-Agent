@@ -2,6 +2,7 @@ from biztrip_agent.agent_task import (
     AGENT_TASK_SCHEMA,
     build_agent_task,
     recover_record_fields,
+    run_recovery_loop,
 )
 
 
@@ -37,7 +38,7 @@ def test_agent_task_blocks_delivery_and_asks_evidence_based_questions():
 
     assert task["status"] == "needs_user_input"
     assert task["plan"][-1]["status"] == "blocked"
-    assert {question["issue_code"] for question in task["questions"]} == {
+    assert set(task["questions"][0]["issue_codes"]) == {
         "missing_amount",
         "missing_vendor",
     }
@@ -73,9 +74,8 @@ def test_recovery_uses_existing_structured_evidence_without_guessing():
     actions = recover_record_fields(records)
 
     assert records[0]["日期"] == "2026-08-02"
-    assert records[0]["供应商"] == "测试酒店"
     assert records[1]["供应商"] == "测试餐厅"
-    assert len(actions) == 3
+    assert len(actions) == 2
     assert all(action["source"] == "existing_evidence" for action in actions)
 
 
@@ -111,4 +111,68 @@ def test_recovery_records_attachment_backfill_and_reduces_open_issues():
     assert actions[0]["field"] == "金额"
     assert after["status"] == "completed"
     assert after["evidence"]["resolved_issue_count"] == 1
-    assert after["decisions"][0]["action"] == "recover_field"
+    assert after["decisions"][0]["action"] == "use_tool"
+
+
+def test_recovery_plans_only_tools_required_by_open_issues():
+    records = [
+        {
+            "分类": "发票",
+            "金额": 88.0,
+            "日期": "2026-08-03",
+            "商家": "测试餐厅",
+            "附件": "invoice.pdf",
+        }
+    ]
+    attachment_calls = []
+
+    _trips, _initial, actions = run_recovery_loop(
+        records,
+        [],
+        attachment_recoverer=lambda items: attachment_calls.append(items),
+    )
+
+    assert records[0]["供应商"] == "测试餐厅"
+    assert [action["tool"] for action in actions] == ["resolve_vendor"]
+    assert attachment_calls == []
+
+
+def test_recovery_stops_when_tools_find_no_evidence():
+    records = [
+        {
+            "分类": "发票",
+            "金额": "",
+            "日期": "",
+            "供应商": "测试供应商",
+            "附件": "invoice.pdf",
+        }
+    ]
+    calls = []
+
+    _trips, _initial, actions = run_recovery_loop(
+        records,
+        [],
+        attachment_recoverer=lambda items: calls.append(items),
+        max_rounds=5,
+    )
+
+    assert len(calls) == 1
+    assert {action["result"] for action in actions} == {"no_evidence"}
+    assert {action["round"] for action in actions} == {1}
+
+
+def test_questions_are_combined_per_record():
+    task = build_agent_task(
+        [{"分类": "发票", "主题": "电子发票"}],
+        [],
+        "整理报销",
+        use_llm=True,
+    )
+
+    assert len(task["questions"]) == 1
+    assert set(task["questions"][0]["issue_codes"]) == {
+        "missing_amount",
+        "missing_date",
+        "missing_vendor",
+        "missing_attachment",
+    }

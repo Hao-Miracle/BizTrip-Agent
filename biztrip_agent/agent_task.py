@@ -71,23 +71,56 @@ def build_agent_task(
     }
 
 
+def run_recovery_loop(
+    records,
+    trips,
+    attachment_recoverer=None,
+    vendor_resolver=None,
+    trip_builder=None,
+    max_rounds=2,
+):
+    """Plan recovery tools from open issues and stop when no progress is made."""
+    initial_validation = validate_reimbursement(records, trips)
+    validation = initial_validation
+    actions = []
+    attempted = set()
+
+    for round_number in range(1, max_rounds + 1):
+        planned = _plan_recovery(validation, attempted)
+        if not planned:
+            break
+
+        changed = False
+        for item in planned:
+            attempted.add((item["record_index"], item["tool"]))
+            action = _execute_recovery(
+                records,
+                item,
+                attachment_recoverer=attachment_recoverer,
+                vendor_resolver=vendor_resolver,
+            )
+            action["round"] = round_number
+            actions.append(action)
+            changed = changed or action["result"] == "recovered"
+
+        if not changed:
+            break
+        if trip_builder:
+            trips = trip_builder(records)
+        validation = validate_reimbursement(records, trips)
+
+    return trips, initial_validation, actions
+
+
 def recover_record_fields(records, attachment_recoverer=None, vendor_resolver=None):
-    """Recover only fields backed by existing structured or attachment evidence."""
-    before = [_recovery_snapshot(record) for record in records]
-    if attachment_recoverer:
-        attachment_recoverer(records)
-
-    for record in records:
-        _copy_first_supported(record, "日期", ("入住日期", "乘车日期", "开票日期", "起飞日期"))
-        _copy_first_supported(record, "供应商", ("商家", "酒店名称"))
-        _copy_first_supported(record, "平台", ("服务商", "航空公司"))
-        if not _record_vendor(record) and vendor_resolver:
-            vendor = vendor_resolver(record)
-            if vendor and vendor != "其他":
-                target = "供应商" if record.get("分类") in {"发票", "酒店"} else "平台"
-                record[target] = vendor
-
-    return _recovery_actions(records, before)
+    """Compatibility helper for callers that do not have trip context."""
+    _trips, _validation, actions = run_recovery_loop(
+        records,
+        [],
+        attachment_recoverer=attachment_recoverer,
+        vendor_resolver=vendor_resolver,
+    )
+    return [action for action in actions if action["result"] == "recovered"]
 
 
 def _questions_from_validation(records, validation):
@@ -96,18 +129,18 @@ def _questions_from_validation(records, validation):
         if not result["issues"]:
             continue
         record = records[result["index"] - 1]
-        for issue in result["issues"]:
-            code = issue["code"]
-            questions.append(
-                {
-                    "question_id": f"record-{result['index']}-{code}",
-                    "record_index": result["index"],
-                    "issue_code": code,
-                    "prompt": ISSUE_PROMPTS.get(code, issue["label"]),
-                    "context": _record_context(record),
-                    "answer": None,
-                }
-            )
+        codes = [issue["code"] for issue in result["issues"]]
+        prompts = [ISSUE_PROMPTS.get(issue["code"], issue["label"]) for issue in result["issues"]]
+        questions.append(
+            {
+                "question_id": f"record-{result['index']}",
+                "record_index": result["index"],
+                "issue_codes": codes,
+                "prompt": " ".join(prompts),
+                "context": _record_context(record),
+                "answer": None,
+            }
+        )
     return questions
 
 
@@ -133,30 +166,65 @@ def _record_vendor(record):
     return record.get("供应商") or record.get("平台") or record.get("酒店名称")
 
 
-def _recovery_snapshot(record):
-    return {
-        key: record.get(key, "")
-        for key in ("金额", "日期", "供应商", "平台")
+def _plan_recovery(validation, attempted):
+    tool_by_issue = {
+        "missing_amount": "inspect_attachment",
+        "missing_date": "normalize_date",
+        "missing_vendor": "resolve_vendor",
     }
-
-
-def _recovery_actions(records, before):
-    actions = []
-    for index, (record, previous) in enumerate(zip(records, before), 1):
-        for field in previous:
-            current = record.get(field, "")
-            if previous[field] in (None, "") and current not in (None, ""):
-                actions.append(
+    planned = []
+    for result in validation["records"]:
+        for issue in result["issues"]:
+            tool = tool_by_issue.get(issue["code"])
+            key = (result["index"], tool)
+            if tool and key not in attempted:
+                planned.append(
                     {
-                        "action": "recover_field",
-                        "record_index": index,
-                        "field": field,
-                        "result": current,
-                        "reason": "从已获取的邮件结构或原始附件中恢复",
-                        "source": "existing_evidence",
+                        "record_index": result["index"],
+                        "issue_code": issue["code"],
+                        "tool": tool,
                     }
                 )
-    return actions
+    return planned
+
+
+def _execute_recovery(records, plan, attachment_recoverer=None, vendor_resolver=None):
+    record = records[plan["record_index"] - 1]
+    tool = plan["tool"]
+    field = ""
+    before = None
+
+    if tool == "inspect_attachment":
+        field = "金额"
+        before = record.get(field)
+        if attachment_recoverer:
+            attachment_recoverer([record])
+    elif tool == "normalize_date":
+        field = "日期"
+        before = record.get(field)
+        _copy_first_supported(record, field, ("入住日期", "乘车日期", "开票日期", "起飞日期"))
+    elif tool == "resolve_vendor":
+        field = "供应商" if record.get("分类") in {"发票", "酒店"} else "平台"
+        before = record.get(field)
+        sources = ("商家", "酒店名称") if field == "供应商" else ("服务商", "航空公司")
+        _copy_first_supported(record, field, sources)
+        if not _record_vendor(record) and vendor_resolver:
+            vendor = vendor_resolver(record)
+            if vendor and vendor != "其他":
+                record[field] = vendor
+
+    recovered = before in (None, "") and record.get(field) not in (None, "")
+    return {
+        "action": "use_tool",
+        "tool": tool,
+        "record_index": plan["record_index"],
+        "issue_code": plan["issue_code"],
+        "field": field,
+        "result": "recovered" if recovered else "no_evidence",
+        "value": record.get(field, "") if recovered else "",
+        "reason": "找到已有证据" if recovered else "现有材料不足，未修改数据",
+        "source": "existing_evidence" if recovered else "none",
+    }
 
 
 def _step(step_id, title, status):
