@@ -856,6 +856,7 @@ def _agent_resolution_html(output_dir=None):
         "possible_duplicate",
         "identifier_conflict",
         "missing_attachment",
+        "unreadable_attachment",
     }
     issue_labels = {
         "missing_amount": "请确认正确金额。",
@@ -865,6 +866,7 @@ def _agent_resolution_html(output_dir=None):
         "possible_duplicate": "如果这是重复记录，请将它从本次报销排除。",
         "identifier_conflict": "这条记录与相同票据编号的数据冲突，请确认是否排除。",
         "missing_attachment": "Agent没有找到原件，请上传对应凭证。",
+        "unreadable_attachment": "现有原件无法读取，请重新上传原始凭证。",
     }
     rows = []
     for question in questions:
@@ -916,10 +918,14 @@ def _agent_resolution_html(output_dir=None):
                 f'<input name="answer_{index}_{duplicate_code}" type="checkbox" value="exclude"> '
                 '从本次报销排除这条记录</label>'
             )
-        if "missing_attachment" in codes:
+        attachment_issue = next(
+            (code for code in ("missing_attachment", "unreadable_attachment") if code in codes),
+            None,
+        )
+        if attachment_issue:
             fields.append(
                 f'<label for="answer-{index}-attachment">报销原件</label>'
-                f'<input id="answer-{index}-attachment" name="answer_{index}_missing_attachment" '
+                f'<input id="answer-{index}-attachment" name="answer_{index}_{attachment_issue}" '
                 'type="file" accept=".pdf,.zip,.jpg,.jpeg,.png,.heic">'
             )
         rows.append(
@@ -1008,7 +1014,7 @@ def _parse_post_form(content_type, body):
 
 
 def _save_uploaded_attachment(upload, records_path, record_index, issue_code):
-    if issue_code != "missing_attachment":
+    if issue_code not in {"missing_attachment", "unreadable_attachment"}:
         raise ValueError("这个问题不接受文件上传。")
     try:
         payload = json.loads(records_path.read_text(encoding="utf-8"))
@@ -1016,7 +1022,7 @@ def _save_uploaded_attachment(upload, records_path, record_index, issue_code):
         raise ValueError("无法读取当前任务，请刷新后重试。") from exc
     allowed = any(
         int(question.get("record_index", 0)) == record_index
-        and "missing_attachment" in question.get("issue_codes", [])
+        and issue_code in question.get("issue_codes", [])
         for question in payload.get("agent_task", {}).get("questions", [])
     )
     if not allowed:

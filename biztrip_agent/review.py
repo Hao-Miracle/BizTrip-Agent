@@ -9,13 +9,13 @@ from biztrip_agent.results import unique_output_path
 from biztrip_agent.validation import validate_reimbursement
 
 
-def generate_review_html(records, trips, output_dir, scan_label, excel_path=None):
+def generate_review_html(records, trips, output_dir, scan_label, excel_path=None, attachment_dir=None):
     """Write a self-contained HTML review page and return its path."""
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     total = sum(record.get("金额", 0) or 0 for record in records)
-    validation = validate_reimbursement(records, trips)
+    validation = validate_reimbursement(records, trips, attachment_dir=attachment_dir)
     issues = _issue_rows(records, validation)
     categories = _category_totals(records)
     generated_at = datetime.now().strftime("%Y-%m-%d %H:%M")

@@ -15,6 +15,14 @@ ISSUE_PROMPTS = {
     "unassigned_trip": "这条费用无法可靠归入现有行程，请确认它属于哪次出差。",
     "identifier_conflict": "相同票据编号对应了不同信息，请确认哪条记录正确。",
     "possible_duplicate": "发现疑似重复凭证，请确认是否只保留一条。",
+    "invalid_amount": "金额不是有效的两位小数，请确认正确金额。",
+    "invalid_date": "日期无效，请确认正确日期。",
+    "invalid_attachment": "原件名称或格式不符合要求，请重新上传原始凭证。",
+    "unreadable_attachment": "原件不存在、为空或无法读取，请重新上传原始凭证。",
+    "multiple_trips": "同一费用被分配到了多个行程，请确认正确归属。",
+    "invalid_trip_dates": "行程起止日期存在错误，需要重新确认行程。",
+    "trip_total_mismatch": "行程合计与费用明细不一致，需要重新计算。",
+    "date_outside_trip": "费用日期不在所属行程范围内，请确认行程归属或日期。",
 }
 
 
@@ -25,9 +33,10 @@ def build_agent_task(
     use_llm,
     initial_validation=None,
     recovery_actions=None,
+    attachment_dir=None,
 ):
     """Describe the current goal, completed work and required next decisions."""
-    validation = validate_reimbursement(records, trips)
+    validation = validate_reimbursement(records, trips, attachment_dir=attachment_dir)
     initial_validation = initial_validation or validation
     recovery_actions = recovery_actions or []
     questions = _questions_from_validation(records, trips, validation)

@@ -3,6 +3,12 @@ from biztrip_agent.resolution import apply_answers, resolve_results
 from biztrip_agent.results import load_results_json, write_results_json
 
 
+def _write_pdf(directory, name):
+    attachment_dir = directory / "附件"
+    attachment_dir.mkdir(exist_ok=True)
+    (attachment_dir / name).write_bytes(b"%PDF-1.7 test document")
+
+
 def test_apply_answers_changes_only_current_open_questions():
     records = [
         {"分类": "发票", "金额": "", "日期": "", "供应商": "", "附件": "invoice.pdf"},
@@ -30,6 +36,7 @@ def test_apply_answers_changes_only_current_open_questions():
 
 
 def test_resolve_results_revalidates_and_writes_new_package(tmp_path):
+    _write_pdf(tmp_path, "invoice.pdf")
     records = [
         {"分类": "发票", "金额": "", "日期": "2026-08-02", "供应商": "测试餐厅", "附件": "invoice.pdf"}
     ]
@@ -47,6 +54,8 @@ def test_resolve_results_revalidates_and_writes_new_package(tmp_path):
 
 
 def test_user_can_exclude_one_confirmed_duplicate(tmp_path):
+    _write_pdf(tmp_path, "a.pdf")
+    _write_pdf(tmp_path, "b.pdf")
     records = [
         {"记录ID": "R0001", "分类": "发票", "订单号": "A1", "金额": 20.0, "日期": "2026-08-01", "供应商": "商店", "附件": "a.pdf"},
         {"记录ID": "R0002", "分类": "发票", "订单号": "A1", "金额": 20.0, "日期": "2026-08-01", "供应商": "商店", "附件": "b.pdf"},
@@ -66,6 +75,8 @@ def test_user_can_exclude_one_confirmed_duplicate(tmp_path):
 
 
 def test_user_trip_choice_keeps_original_trip_identity(tmp_path):
+    _write_pdf(tmp_path, "a.pdf")
+    _write_pdf(tmp_path, "b.pdf")
     assigned = {
         "记录ID": "R0001",
         "分类": "火车票",
@@ -106,6 +117,7 @@ def test_user_trip_choice_keeps_original_trip_identity(tmp_path):
 
 
 def test_user_uploaded_attachment_closes_missing_original_issue(tmp_path):
+    _write_pdf(tmp_path, "user_R0001_invoice.pdf")
     records = [
         {"记录ID": "R0001", "分类": "发票", "金额": 20.0, "日期": "2026-08-01", "供应商": "商店", "附件": ""}
     ]

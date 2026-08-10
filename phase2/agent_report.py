@@ -363,6 +363,7 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
         use_llm=use_llm,
         initial_validation=initial_validation,
         recovery_actions=recovery_actions,
+        attachment_dir=attach_dir,
     )
     for record in records:
         record.pop('_邮件正文', None)
@@ -373,7 +374,14 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
     review_path = None
     if review:
         from biztrip_agent.review import generate_review_html
-        review_path = generate_review_html(records, trips, output_dir, scan_label, excel_path=xlsx_path)
+        review_path = generate_review_html(
+            records,
+            trips,
+            output_dir,
+            scan_label,
+            excel_path=xlsx_path,
+            attachment_dir=attach_dir,
+        )
     from biztrip_agent.results import write_results_json
     results_path = write_results_json(
         records,
@@ -383,6 +391,7 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
         xlsx_path=xlsx_path,
         review_path=review_path,
         agent_task=agent_task,
+        attachment_dir=attach_dir,
     )
 
     # ===== 打印结果 =====

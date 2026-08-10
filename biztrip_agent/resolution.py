@@ -16,6 +16,7 @@ ANSWER_FIELDS = {
     "possible_duplicate": "duplicate_action",
     "identifier_conflict": "duplicate_action",
     "missing_attachment": "附件",
+    "unreadable_attachment": "附件",
 }
 
 
@@ -53,6 +54,7 @@ def resolve_results(json_path, answers, output_dir=None):
         use_llm=payload.get("agent_task", {}).get("mode") == "agent",
         initial_validation=payload.get("validation"),
         recovery_actions=[*previous_actions, *actions],
+        attachment_dir=json_path.parent / "附件",
     )
     total = sum(record.get("金额", 0) or 0 for record in records)
     scan_label = payload.get("scan_label") or "用户确认"
@@ -66,7 +68,14 @@ def resolve_results(json_path, answers, output_dir=None):
     )
     from biztrip_agent.review import generate_review_html
 
-    review_path = generate_review_html(records, trips, target_dir, scan_label, excel_path=xlsx_path)
+    review_path = generate_review_html(
+        records,
+        trips,
+        target_dir,
+        scan_label,
+        excel_path=xlsx_path,
+        attachment_dir=json_path.parent / "附件",
+    )
     results_path = write_results_json(
         records,
         trips,
@@ -75,6 +84,7 @@ def resolve_results(json_path, answers, output_dir=None):
         xlsx_path=xlsx_path,
         review_path=review_path,
         agent_task=agent_task,
+        attachment_dir=json_path.parent / "附件",
     )
     return {
         "records": records,
@@ -149,7 +159,7 @@ def _normalize_answer(issue_code, value):
         return int(value)
     if issue_code in {"possible_duplicate", "identifier_conflict"}:
         return value if value == "exclude" else None
-    if issue_code == "missing_attachment":
+    if issue_code in {"missing_attachment", "unreadable_attachment"}:
         path = Path(value)
         if path.name != value or path.suffix.lower() not in {".pdf", ".zip", ".jpg", ".jpeg", ".png", ".heic"}:
             raise ValueError("原件文件格式无效。")

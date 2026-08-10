@@ -35,6 +35,7 @@ def write_results_json(
     xlsx_path=None,
     review_path=None,
     agent_task=None,
+    attachment_dir=None,
 ):
     """Write scan results to a JSON file and return its path."""
     from biztrip_agent.validation import validate_reimbursement
@@ -44,7 +45,7 @@ def write_results_json(
     public_records = _without_private_fields(records)
     public_trips = _without_private_fields(trips)
     total = sum(record.get("金额", 0) or 0 for record in public_records)
-    validation = validate_reimbursement(public_records, public_trips)
+    validation = validate_reimbursement(public_records, public_trips, attachment_dir=attachment_dir)
     path = unique_output_path(output_dir, "records", ".json")
 
     payload = {
