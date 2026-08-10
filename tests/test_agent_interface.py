@@ -3,7 +3,6 @@ from pathlib import Path
 
 import biztrip_agent.agent_interface as agent_interface
 from biztrip_agent.agent_interface import (
-    AUDIT_SCHEMA,
     INTERFACE_SCHEMA,
     answer_task,
     normalize_answers,
@@ -110,32 +109,6 @@ def test_agent_start_routes_first_time_user_to_local_setup(capsys, monkeypatch):
     assert "Agent 模型" in payload["error"]["message"]
 
 
-def test_cli_agent_audit_uses_email_only_and_never_delivers(tmp_path, capsys, monkeypatch):
-    source = _task_file(tmp_path, amount=88.5)
-    calls = []
-
-    def fake_audit(**kwargs):
-        calls.append(kwargs)
-        return {"results_path": str(source)}
-
-    monkeypatch.setattr("phase2.agent_report.main", fake_audit)
-    monkeypatch.setattr(agent_interface, "_email_configured", lambda: True)
-
-    exit_code = main(
-        ["agent", "audit", "--start", "2026-08-01", "--end", "2026-08-31"]
-    )
-    payload = json.loads(capsys.readouterr().out.strip())
-
-    assert exit_code == 0
-    assert payload["schema_version"] == AUDIT_SCHEMA
-    assert payload["status"] == "audit_ready"
-    assert payload["files"] == {"package_dir": "", "excel": ""}
-    assert payload["next_action"] == "present_audit"
-    assert payload["full_package"]["requires"] == "local_personal_app"
-    assert calls[0]["no_llm"] is True
-    assert calls[0]["deliver"] is False
-
-
 def test_public_skill_cannot_start_full_package_flow():
     skill = (
         Path(__file__).parents[1]
@@ -144,34 +117,11 @@ def test_public_skill_cannot_start_full_package_flow():
         / "SKILL.md"
     ).read_text(encoding="utf-8")
 
-    assert "biztrip agent audit" in skill
+    assert "audit_mailbox.py audit" in skill
+    assert "install_engine.py" not in skill
     assert "biztrip agent start" not in skill
     assert "biztrip agent answer" not in skill
     assert "LLM_API_KEY" not in skill
-
-
-def test_cli_agent_audit_rejects_more_than_one_month(capsys):
-    exit_code = main(
-        ["agent", "audit", "--start", "2026-07-01", "--end", "2026-08-01"]
-    )
-    payload = json.loads(capsys.readouterr().out.strip())
-
-    assert exit_code == 1
-    assert payload["schema_version"] == AUDIT_SCHEMA
-    assert payload["error"]["code"] == "invalid_range"
-
-
-def test_agent_audit_routes_first_time_user_to_email_setup(capsys, monkeypatch):
-    monkeypatch.setattr(agent_interface, "_email_configured", lambda: False)
-
-    exit_code = main(["agent", "audit", "--count", "60"])
-    payload = json.loads(capsys.readouterr().out.strip())
-
-    assert exit_code == 1
-    assert payload["schema_version"] == AUDIT_SCHEMA
-    assert payload["error"]["code"] == "setup_required"
-    assert "Agent 模型" not in payload["error"]["message"]
-    assert "邮箱" in payload["error"]["message"]
 
 
 def test_cli_agent_answer_reads_structured_file(tmp_path, capsys):
