@@ -124,7 +124,7 @@ Excel 包含：
 
 ## 效果满意后，安装本地测试版
 
-Skill 用于低门槛体验和获客。本地测试版用于持续使用：配置只做一次，之后每次选择报销时间即可。Windows 和 macOS 使用同一套 Agent、核验规则和输出格式。
+先用 Skill 完成一次真实报销任务，确认结果符合需求后，可安装本地测试版持续使用。配置只做一次，之后每次选择报销时间即可。Windows 和 macOS 使用同一套 Agent、核验规则和输出格式。
 
 ### Windows
 
@@ -179,7 +179,7 @@ BizTrip 的所有版本都包含 Agent 能力。用户自己选择兼容 OpenAI 
 - OA、ERP、财务系统及企业模板连接。
 - 托管模型调用、自动更新、私有部署和技术支持。
 
-这些能力正在接受付费需求和联合验证，当前开源版本不宣称已经提供。需要付费部署、企业规则接入、私有化或团队工作流，可以提交 [专业版申请](https://github.com/Hao-Miracle/BizTrip-Agent/issues/new?template=professional_inquiry.yml)。请勿在公开表单中填写员工信息、发票内容、邮箱授权码或 API Key。
+当前开源版本不包含上述团队和企业能力。需要专业部署、企业规则接入、私有化或团队工作流，可以提交 [专业版申请](https://github.com/Hao-Miracle/BizTrip-Agent/issues/new?template=professional_inquiry.yml)。请勿在公开表单中填写员工信息、发票内容、邮箱授权码或 API Key。
 
 ---
 
