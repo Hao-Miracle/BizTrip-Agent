@@ -333,6 +333,7 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
     from biztrip_agent.agent_task import run_recovery_loop
 
     trips = aggregate_trips(records, use_llm=use_llm)
+    from biztrip_agent.attachment_match import find_unlinked_attachment
     if use_llm:
         from phase2.llm_evidence import resolve_evidence
 
@@ -350,6 +351,7 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
         vendor_resolver=infer_vendor,
         trip_builder=lambda items: aggregate_trips(items, use_llm=use_llm),
         evidence_resolver=evidence_resolver,
+        attachment_matcher=lambda record, items: find_unlinked_attachment(record, items, attach_dir),
     )
 
     # ===== Step 5: 复核 + 建立可追溯的 Agent 任务状态 =====

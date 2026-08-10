@@ -5,6 +5,7 @@ import html
 import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -14,6 +15,8 @@ import traceback
 import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from email import policy
+from email.parser import BytesParser
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -21,6 +24,7 @@ from urllib.parse import parse_qs, urlparse
 JOBS = {}
 JOBS_LOCK = threading.Lock()
 MAX_JOBS = 20
+MAX_POST_BYTES = 25 * 1024 * 1024
 
 
 def run_server(host="127.0.0.1", port=8765, open_browser=True):
@@ -64,8 +68,11 @@ class BizTripWebHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         length = int(self.headers.get("Content-Length", "0"))
-        body = self.rfile.read(length).decode("utf-8")
-        form = {key: values[-1] for key, values in parse_qs(body).items()}
+        if length > MAX_POST_BYTES:
+            self._send_html(render_home(error="上传文件不能超过 20 MB。"), status=413)
+            return
+        body = self.rfile.read(length)
+        form = _parse_post_form(self.headers.get("Content-Type", ""), body)
         if self.path == "/demo":
             self._send_html(_run_demo(form))
             return
@@ -848,6 +855,7 @@ def _agent_resolution_html(output_dir=None):
         "unassigned_trip",
         "possible_duplicate",
         "identifier_conflict",
+        "missing_attachment",
     }
     issue_labels = {
         "missing_amount": "请确认正确金额。",
@@ -856,6 +864,7 @@ def _agent_resolution_html(output_dir=None):
         "unassigned_trip": "请选择这条费用所属的行程。",
         "possible_duplicate": "如果这是重复记录，请将它从本次报销排除。",
         "identifier_conflict": "这条记录与相同票据编号的数据冲突，请确认是否排除。",
+        "missing_attachment": "Agent没有找到原件，请上传对应凭证。",
     }
     rows = []
     for question in questions:
@@ -907,6 +916,12 @@ def _agent_resolution_html(output_dir=None):
                 f'<input name="answer_{index}_{duplicate_code}" type="checkbox" value="exclude"> '
                 '从本次报销排除这条记录</label>'
             )
+        if "missing_attachment" in codes:
+            fields.append(
+                f'<label for="answer-{index}-attachment">报销原件</label>'
+                f'<input id="answer-{index}-attachment" name="answer_{index}_missing_attachment" '
+                'type="file" accept=".pdf,.zip,.jpg,.jpeg,.png,.heic">'
+            )
         rows.append(
             '<div class="result-metric">'
             f'<strong>{html.escape(str(title))}</strong>'
@@ -920,7 +935,7 @@ def _agent_resolution_html(output_dir=None):
         '<section class="results">'
         '<h2>Agent 需要你确认</h2>'
         '<div class="sub">只填写你能确认的信息，留空的项目会继续保持待处理。</div>'
-        '<form method="post" action="/resolve">'
+        '<form method="post" action="/resolve" enctype="multipart/form-data">'
         f'<input name="json_path" type="hidden" value="{html.escape(str(records_path.resolve()))}">'
         f'<div class="result-grid">{"".join(rows)}</div>'
         '<button type="submit">确认并重新核验</button>'
@@ -936,24 +951,105 @@ def _run_resolve(form):
         return render_home(error="任务结果已经变化，请刷新页面后重新确认。")
 
     answers = {}
+    saved_uploads = []
     for key, value in form.items():
         if not key.startswith("answer_"):
             continue
         parts = key.split("_", 2)
         if len(parts) != 3 or not parts[1].isdigit():
             continue
-        answers[(int(parts[1]), parts[2])] = value
+        index = int(parts[1])
+        issue_code = parts[2]
+        if isinstance(value, dict) and "data" in value:
+            try:
+                saved_name, saved_path = _save_uploaded_attachment(value, latest, index, issue_code)
+            except ValueError as exc:
+                return render_home(error=str(exc))
+            answers[(index, issue_code)] = saved_name
+            saved_uploads.append(saved_path)
+        else:
+            answers[(index, issue_code)] = value
     try:
         from biztrip_agent.resolution import resolve_results
 
         result = resolve_results(latest, answers)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
+        for path in saved_uploads:
+            path.unlink(missing_ok=True)
         return render_home(error=str(exc))
     return render_home(
         message="已采用你的确认并重新核验。",
         files=[result["xlsx_path"], result["review_path"]],
         result_summary=_result_summary(latest.parent),
     )
+
+
+def _parse_post_form(content_type, body):
+    if not content_type.lower().startswith("multipart/form-data"):
+        text = body.decode("utf-8")
+        return {key: values[-1] for key, values in parse_qs(text).items()}
+    message = BytesParser(policy=policy.default).parsebytes(
+        f"Content-Type: {content_type}\r\nMIME-Version: 1.0\r\n\r\n".encode("utf-8") + body
+    )
+    form = {}
+    for part in message.iter_parts():
+        name = part.get_param("name", header="content-disposition")
+        if not name:
+            continue
+        filename = part.get_filename()
+        data = part.get_payload(decode=True) or b""
+        if filename:
+            if data:
+                form[name] = {"filename": filename, "data": data}
+        else:
+            charset = part.get_content_charset() or "utf-8"
+            form[name] = data.decode(charset)
+    return form
+
+
+def _save_uploaded_attachment(upload, records_path, record_index, issue_code):
+    if issue_code != "missing_attachment":
+        raise ValueError("这个问题不接受文件上传。")
+    try:
+        payload = json.loads(records_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError("无法读取当前任务，请刷新后重试。") from exc
+    allowed = any(
+        int(question.get("record_index", 0)) == record_index
+        and "missing_attachment" in question.get("issue_codes", [])
+        for question in payload.get("agent_task", {}).get("questions", [])
+    )
+    if not allowed:
+        raise ValueError("这条记录当前不需要上传原件。")
+
+    data = upload.get("data", b"")
+    original = Path(str(upload.get("filename", ""))).name
+    suffix = Path(original).suffix.lower()
+    if not data or len(data) > 20 * 1024 * 1024:
+        raise ValueError("原件文件必须小于 20 MB。")
+    if suffix not in {".pdf", ".zip", ".jpg", ".jpeg", ".png", ".heic"}:
+        raise ValueError("只支持 PDF、ZIP、JPG、PNG 或 HEIC 原件。")
+    if not _valid_attachment_content(suffix, data):
+        raise ValueError("文件内容与扩展名不一致，请选择原始凭证文件。")
+    safe_stem = re.sub(r"[^0-9A-Za-z._-]+", "_", Path(original).stem).strip("._") or "attachment"
+    filename = f"user_R{record_index:04d}_{uuid.uuid4().hex[:8]}_{safe_stem}{suffix}"
+    attachment_dir = records_path.parent / "附件"
+    attachment_dir.mkdir(parents=True, exist_ok=True)
+    path = attachment_dir / filename
+    path.write_bytes(data)
+    return filename, path
+
+
+def _valid_attachment_content(suffix, data):
+    signatures = {
+        ".pdf": data.lstrip().startswith(b"%PDF"),
+        ".zip": data.startswith(b"PK\x03\x04") or data.startswith(b"PK\x05\x06"),
+        ".jpg": data.startswith(b"\xff\xd8\xff"),
+        ".jpeg": data.startswith(b"\xff\xd8\xff"),
+        ".png": data.startswith(b"\x89PNG\r\n\x1a\n"),
+        ".heic": b"ftyp" in data[:32],
+    }
+    return signatures.get(suffix, False)
 
 
 def _latest_records_json(output_dir=None):

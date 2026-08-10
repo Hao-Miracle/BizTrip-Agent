@@ -15,6 +15,7 @@ ANSWER_FIELDS = {
     "unassigned_trip": "行程归属",
     "possible_duplicate": "duplicate_action",
     "identifier_conflict": "duplicate_action",
+    "missing_attachment": "附件",
 }
 
 
@@ -148,6 +149,11 @@ def _normalize_answer(issue_code, value):
         return int(value)
     if issue_code in {"possible_duplicate", "identifier_conflict"}:
         return value if value == "exclude" else None
+    if issue_code == "missing_attachment":
+        path = Path(value)
+        if path.name != value or path.suffix.lower() not in {".pdf", ".zip", ".jpg", ".jpeg", ".png", ".heic"}:
+            raise ValueError("原件文件格式无效。")
+        return value
     return None
 
 

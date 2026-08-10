@@ -78,6 +78,7 @@ def run_recovery_loop(
     vendor_resolver=None,
     trip_builder=None,
     evidence_resolver=None,
+    attachment_matcher=None,
     max_rounds=2,
 ):
     """Plan recovery tools from open issues and stop when no progress is made."""
@@ -99,6 +100,7 @@ def run_recovery_loop(
                 item,
                 attachment_recoverer=attachment_recoverer,
                 vendor_resolver=vendor_resolver,
+                attachment_matcher=attachment_matcher,
             )
             action["round"] = round_number
             actions.append(action)
@@ -203,6 +205,7 @@ def _plan_recovery(validation, attempted):
         "missing_amount": "inspect_attachment",
         "missing_date": "normalize_date",
         "missing_vendor": "resolve_vendor",
+        "missing_attachment": "find_attachment",
     }
     planned = []
     for result in validation["records"]:
@@ -220,7 +223,13 @@ def _plan_recovery(validation, attempted):
     return planned
 
 
-def _execute_recovery(records, plan, attachment_recoverer=None, vendor_resolver=None):
+def _execute_recovery(
+    records,
+    plan,
+    attachment_recoverer=None,
+    vendor_resolver=None,
+    attachment_matcher=None,
+):
     record = records[plan["record_index"] - 1]
     tool = plan["tool"]
     field = ""
@@ -244,6 +253,12 @@ def _execute_recovery(records, plan, attachment_recoverer=None, vendor_resolver=
             vendor = vendor_resolver(record)
             if vendor and vendor != "其他":
                 record[field] = vendor
+    elif tool == "find_attachment":
+        field = "附件"
+        before = record.get(field)
+        candidate = attachment_matcher(record, records) if attachment_matcher else None
+        if candidate:
+            record[field] = candidate["attachment"]
 
     recovered = before in (None, "") and record.get(field) not in (None, "")
     return {
@@ -256,6 +271,11 @@ def _execute_recovery(records, plan, attachment_recoverer=None, vendor_resolver=
         "value": record.get(field, "") if recovered else "",
         "reason": "找到已有证据" if recovered else "现有材料不足，未修改数据",
         "source": "existing_evidence" if recovered else "none",
+        **(
+            {"match_signals": candidate.get("signals", [])}
+            if tool == "find_attachment" and recovered
+            else {}
+        ),
     }
 
 

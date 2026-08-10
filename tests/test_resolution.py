@@ -103,3 +103,17 @@ def test_user_trip_choice_keeps_original_trip_identity(tmp_path):
     assert payload["summary"]["can_submit"] is True
     assert payload["trips"][0]["trip_id"] == 7
     assert {record["记录ID"] for record in payload["trips"][0]["records"]} == {"R0001", "R0002"}
+
+
+def test_user_uploaded_attachment_closes_missing_original_issue(tmp_path):
+    records = [
+        {"记录ID": "R0001", "分类": "发票", "金额": 20.0, "日期": "2026-08-01", "供应商": "商店", "附件": ""}
+    ]
+    task = build_agent_task(records, [], "整理报销", use_llm=True)
+    source = write_results_json(records, [], tmp_path, "八月报销", agent_task=task)
+
+    result = resolve_results(source, {(1, "missing_attachment"): "user_R0001_invoice.pdf"})
+
+    payload = load_results_json(result["results_path"])
+    assert payload["records"][0]["附件"] == "user_R0001_invoice.pdf"
+    assert payload["summary"]["can_submit"] is True

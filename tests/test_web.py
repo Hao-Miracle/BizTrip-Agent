@@ -14,6 +14,7 @@ from biztrip_agent.web import (
     _job_snapshot,
     _onboarding_html,
     _provider_setup_hint,
+    _parse_post_form,
     _preflight_scan,
     _read_env_values,
     _result_summary,
@@ -25,6 +26,7 @@ from biztrip_agent.web import (
     _summary_html,
     _start_job,
     _using_temporary_env,
+    _valid_attachment_content,
     _validate_scan_inputs,
     _write_env_values,
     readiness_status,
@@ -340,7 +342,30 @@ def test_agent_resolution_html_shows_only_editable_open_fields(tmp_path):
     assert "Agent 需要你确认" in page
     assert "电子发票" in page
     assert 'name="answer_1_missing_amount"' in page
-    assert 'name="answer_1_missing_attachment"' not in page
+    assert 'name="answer_1_missing_attachment"' in page
+    assert 'enctype="multipart/form-data"' in page
+
+
+def test_multipart_parser_keeps_text_and_uploaded_bytes():
+    boundary = "biztrip-boundary"
+    body = (
+        f"--{boundary}\r\nContent-Disposition: form-data; name=\"json_path\"\r\n\r\n/tmp/result.json\r\n"
+        f"--{boundary}\r\nContent-Disposition: form-data; name=\"answer_1_missing_attachment\"; filename=\"invoice.pdf\"\r\n"
+        "Content-Type: application/pdf\r\n\r\nPDF-DATA\r\n"
+        f"--{boundary}--\r\n"
+    ).encode("utf-8")
+
+    form = _parse_post_form(f"multipart/form-data; boundary={boundary}", body)
+
+    assert form["json_path"] == "/tmp/result.json"
+    assert form["answer_1_missing_attachment"]["filename"] == "invoice.pdf"
+    assert form["answer_1_missing_attachment"]["data"] == b"PDF-DATA"
+
+
+def test_uploaded_attachment_content_must_match_extension():
+    assert _valid_attachment_content(".pdf", b"%PDF-1.7 content") is True
+    assert _valid_attachment_content(".png", b"\x89PNG\r\n\x1a\ncontent") is True
+    assert _valid_attachment_content(".pdf", b"renamed executable") is False
 
 
 def test_friendly_error_maps_common_failures():
