@@ -326,6 +326,9 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
         print('\n未发现出差相关邮件')
         return
 
+    for index, record in enumerate(records, 1):
+        record.setdefault('记录ID', f'R{index:04d}')
+
     # ===== Step 4: 首次核验 + 自动补救 =====
     from biztrip_agent.agent_task import run_recovery_loop
 

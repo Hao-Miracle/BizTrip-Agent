@@ -30,7 +30,7 @@ def build_agent_task(
     validation = validate_reimbursement(records, trips)
     initial_validation = initial_validation or validation
     recovery_actions = recovery_actions or []
-    questions = _questions_from_validation(records, validation)
+    questions = _questions_from_validation(records, trips, validation)
     ready = validation["can_submit"]
 
     return {
@@ -131,7 +131,7 @@ def recover_record_fields(records, attachment_recoverer=None, vendor_resolver=No
     return [action for action in actions if action["result"] == "recovered"]
 
 
-def _questions_from_validation(records, validation):
+def _questions_from_validation(records, trips, validation):
     questions = []
     for result in validation["records"]:
         if not result["issues"]:
@@ -146,16 +146,40 @@ def _questions_from_validation(records, validation):
                 "issue_codes": codes,
                 "prompt": " ".join(prompts),
                 "context": _record_context(record),
+                "options": _question_options(codes, trips),
                 "answer": None,
             }
         )
     return questions
 
 
+def _question_options(codes, trips):
+    options = []
+    if "unassigned_trip" in codes:
+        options.extend(
+            {
+                "issue_code": "unassigned_trip",
+                "value": str(trip.get("trip_id", "")),
+                "label": trip.get("summary") or f"行程 {trip.get('trip_id', '')}",
+            }
+            for trip in trips
+            if trip.get("trip_id") not in (None, "")
+        )
+    if {"possible_duplicate", "identifier_conflict"}.intersection(codes):
+        options.append(
+            {
+                "issue_code": "duplicate_action",
+                "value": "exclude",
+                "label": "从本次报销排除这条记录",
+            }
+        )
+    return options
+
+
 def _record_context(record):
     return {
         key: record.get(key, "")
-        for key in ("分类", "日期", "金额", "主题", "供应商", "平台", "附件")
+        for key in ("记录ID", "分类", "日期", "金额", "主题", "供应商", "平台", "附件")
         if record.get(key) not in (None, "")
     }
 

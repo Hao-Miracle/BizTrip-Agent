@@ -187,7 +187,7 @@ def render_home(message=None, error=None, files=None, result_summary=None):
       font: inherit;
       background: #fff;
     }}
-    input[type="number"], input[type="date"] {{
+    input[type="number"], input[type="date"], select {{
       width: 100%;
       min-height: 38px;
       border: 1px solid var(--line);
@@ -841,11 +841,21 @@ def _agent_resolution_html(output_dir=None):
     except (OSError, json.JSONDecodeError):
         return ""
     questions = payload.get("agent_task", {}).get("questions", [])
-    editable = {"missing_amount", "missing_date", "missing_vendor"}
+    editable = {
+        "missing_amount",
+        "missing_date",
+        "missing_vendor",
+        "unassigned_trip",
+        "possible_duplicate",
+        "identifier_conflict",
+    }
     issue_labels = {
         "missing_amount": "请确认正确金额。",
         "missing_date": "请确认发生日期。",
         "missing_vendor": "请确认实际收款方。",
+        "unassigned_trip": "请选择这条费用所属的行程。",
+        "possible_duplicate": "如果这是重复记录，请将它从本次报销排除。",
+        "identifier_conflict": "这条记录与相同票据编号的数据冲突，请确认是否排除。",
     }
     rows = []
     for question in questions:
@@ -871,6 +881,31 @@ def _agent_resolution_html(output_dir=None):
             fields.append(
                 f'<label for="answer-{index}-vendor">供应商</label>'
                 f'<input id="answer-{index}-vendor" name="answer_{index}_missing_vendor" type="text">'
+            )
+        if "unassigned_trip" in codes:
+            choices = [
+                option for option in question.get("options", [])
+                if option.get("issue_code") == "unassigned_trip"
+            ]
+            if choices:
+                options_html = '<option value="">请选择行程</option>' + "".join(
+                    f'<option value="{html.escape(str(option.get("value", "")))}">'
+                    f'{html.escape(str(option.get("label", "")))}</option>'
+                    for option in choices
+                )
+                fields.append(
+                    f'<label for="answer-{index}-trip">所属行程</label>'
+                    f'<select id="answer-{index}-trip" name="answer_{index}_unassigned_trip">{options_html}</select>'
+                )
+        duplicate_code = next(
+            (code for code in ("possible_duplicate", "identifier_conflict") if code in codes),
+            None,
+        )
+        if duplicate_code:
+            fields.append(
+                '<label class="check">'
+                f'<input name="answer_{index}_{duplicate_code}" type="checkbox" value="exclude"> '
+                '从本次报销排除这条记录</label>'
             )
         rows.append(
             '<div class="result-metric">'

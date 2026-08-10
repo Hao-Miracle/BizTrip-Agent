@@ -206,3 +206,41 @@ def test_verified_llm_evidence_is_used_after_rule_tools_fail():
     assert records[0]["金额"] == 88.0
     assert actions[-1]["tool"] == "llm_evidence_analysis"
     assert actions[-1]["source"] == "verified_quote"
+
+
+def test_unassigned_trip_question_contains_existing_trip_choices():
+    assigned = {
+        "记录ID": "R0001",
+        "分类": "火车票",
+        "金额": 100.0,
+        "日期": "2026-08-01",
+        "平台": "12306",
+        "附件": "a.pdf",
+    }
+    unassigned = {
+        "记录ID": "R0002",
+        "分类": "火车票",
+        "金额": 80.0,
+        "日期": "2026-08-01",
+        "平台": "12306",
+        "附件": "b.pdf",
+    }
+    trips = [
+        {
+            "trip_id": 3,
+            "summary": "上海出差",
+            "records": [assigned],
+            "total": 100.0,
+        }
+    ]
+
+    task = build_agent_task([assigned, unassigned], trips, "整理报销", use_llm=True)
+
+    question = next(item for item in task["questions"] if item["record_index"] == 2)
+    assert question["options"] == [
+        {
+            "issue_code": "unassigned_trip",
+            "value": "3",
+            "label": "上海出差",
+        }
+    ]
