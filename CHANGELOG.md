@@ -9,9 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+> `0.1.0` 中的纯规则模式和多 Skill 记录仅描述当时版本。当前产品统一为“一个薄 Skill + Agent 模型 + 本地确定性引擎”。
+
 ### 新增
 
 - **Windows 一键测试版** — GitHub Actions 自动生成无需 Python、Git 或命令行的单文件 EXE
+- **macOS 双架构测试版** — 分别为 Apple Silicon 和 Intel 生成本地应用
+- **统一 Agent 模型配置** — 所有版本内置模型客户端，由用户填写接口地址、API Key 和模型名称
+- **开源薄 Skill** — 使用单一 `biztrip-reimbursement` Skill 编排本地引擎任务
 - **Windows 本地持久化** — 配置保存在 `%LOCALAPPDATA%\BizTripAgent`，报销文件保存在“文档\BizTrip Agent”
 - **本地程序控制** — Web 页面可以打开报销文件夹并安全停止程序
 - **报销包验收结论** — Web 首页和审阅页显示“可以提交”或“暂不建议提交”

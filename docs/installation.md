@@ -161,7 +161,7 @@ A: 升级 Python 到 3.8 或更高版本。推荐使用 [pyenv](https://github.c
 
 - 阅读 [使用指南](usage.md) 了解详细功能
 - 查看 [常见问题](faq.md) 获取更多帮助
-- 加入 [Discussions](../../discussions) 交流
+- 加入 [Discussions](https://github.com/Hao-Miracle/BizTrip-Agent/discussions) 交流
 
 ## 发布检查清单
 

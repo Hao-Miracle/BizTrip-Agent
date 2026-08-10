@@ -2,10 +2,12 @@
 title: "BizTrip Agent 知识库索引"
 tags: [元数据, 导航]
 created: 2026-06-30
-updated: 2026-07-04
+updated: 2026-08-10
 ---
 
 # BizTrip Agent 知识库索引
+
+> 本目录保留产品早期探索和决策记录，不作为当前安装或使用说明。当前产品行为以根目录 `README.md`、`docs/` 和测试为准。
 
 ## 实体页面
 
@@ -26,25 +28,11 @@ updated: 2026-07-04
 | [[wiki/concepts/phase1-tasks.md]] | Phase 1 任务拆解（33 个任务，全部完成） | 2026-07-04 |
 | [[wiki/concepts/agent-config.md]] | Agent 通用 LLM 接入配置说明（多服务商支持） | 2026-07-04 |
 
-## TRAE Skills
-
-| Skill | 一句话 | 位置 |
-|------|--------|------|
-| fetch-emails | IMAP 邮箱连接与邮件获取 | `.trae/skills/fetch-emails/` |
-| classify-emails | 域名+关键词双规则邮件分类 | `.trae/skills/classify-emails/` |
-| extract-emails | 8 平台专用解析器 + 通用兜底提取 | `.trae/skills/extract-emails/` |
-| generate-report | 全链路扫描 → Excel 报表输出 | `.trae/skills/generate-report/` |
-| agent-report | Agent 模式：LLM 增强 + 出差聚合 + 自动降级 | `.trae/skills/agent-report/` |
-
-## 通用 Agent Skills（多平台）
+## 当前 Agent Skill
 
 | Skill | 说明 | 位置 |
 |------|------|------|
-| fetch-emails | IMAP 邮箱连接，通用 Agent 可读 | `skills/fetch-emails.md` |
-| classify-emails | 规则分类引擎 | `skills/classify-emails.md` |
-| extract-emails | 结构化提取 | `skills/extract-emails.md` |
-| generate-report | 全链路报表生成 | `skills/generate-report.md` |
-| agent-report | LLM 增强 Agent | `skills/agent-report.md` |
+| biztrip-reimbursement | 自然语言入口、任务编排和待确认问题交互 | `skills/biztrip-reimbursement/` |
 
 ## 原始资料
 
