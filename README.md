@@ -2,380 +2,253 @@
 
 # BizTrip Agent
 
-**个人出差与旅行的行程与报销信息自动归集工具**
+**把散落在邮箱里的机票、酒店、火车票、打车和发票，整理成经过核验的差旅报销包。**
 
-授权邮箱，AI 自动扫描确认邮件，提取结构化信息。  
-出差中看行程，出差后一键生成报销表。
+你只需要告诉自己的 Agent：
+
+> 帮我整理上个月的差旅报销。
+
+BizTrip 会在本地收集凭证、识别费用、归并出差行程；发现缺失或冲突时先向你确认，全部通过后才交付 Excel 和报销原件。
+
+<p>
+  <a href="skills/biztrip-reimbursement/SKILL.md"><strong>安装开源 Skill</strong></a>
+  ·
+  <a href="#没有-agent也能使用">没有 Agent 也能使用</a>
+  ·
+  <a href="docs/usage.md">查看使用文档</a>
+</p>
 
 <p>
   <a href="https://github.com/Hao-Miracle/BizTrip-Agent/releases">
     <img src="https://img.shields.io/github/v/release/Hao-Miracle/BizTrip-Agent?style=flat-square" alt="release">
   </a>
-  <img src="https://img.shields.io/badge/python-3.8+-yellow?style=flat-square" alt="python">
+  <img src="https://img.shields.io/badge/local--first-private-137333?style=flat-square" alt="local first">
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="license">
-  <a href="CHANGELOG.md">
-    <img src="https://img.shields.io/badge/CHANGELOG-8A2BE2?style=flat-square&logo=keep-a-changelog&logoColor=white" alt="changelog">
-  </a>
   <a href="https://github.com/Hao-Miracle/BizTrip-Agent/stargazers">
     <img src="https://img.shields.io/github/stars/Hao-Miracle/BizTrip-Agent?style=flat-square&color=orange" alt="stars">
   </a>
 </p>
 
-<p>
-  <a href="#-快速开始">快速开始</a> ·
-  <a href="docs/usage.md">使用文档</a> ·
-  <a href="docs/faq.md">常见问题</a> ·
-  <a href="CHANGELOG.md">更新日志</a> ·
-  <a href="CONTRIBUTING.md">贡献指南</a>
-</p>
-
 </div>
 
 ---
 
-## ✨ 为什么用它？
+## 从一句话开始
 
-每次出差回来，是不是要花几个小时：
+BizTrip 的首选入口是开源薄 Skill：[`biztrip-reimbursement`](skills/biztrip-reimbursement/SKILL.md)。它把 BizTrip 接入你正在使用的 Agent，而不是要求你学习新的报销软件。
 
-- 📧 翻几十封邮件找订单和发票
-- 📋 手动录入机票、酒店、打车费用
-- 🔍 核对金额和日期，生怕出错
-- 📊 整理成 Excel 报销表
+把下面的地址交给支持 Skills 的 Agent，并让它安装：
 
-**BizTrip Agent 帮你全自动搞定：**
-
-> 授权邮箱 → 自动扫描 → 提取结构化信息 → 生成报销 Excel + 行程卡  
-> **全程本地处理，只读不写，隐私安全**
-
----
-
-## 🎯 核心能力
-
-| 能力 | 说明 |
-|------|------|
-| **📧 多邮箱支持** | QQ / 163 / 126 / Gmail / Outlook，标准 IMAP 协议 |
-| **🤖 智能分类** | 域名匹配 + 关键词 + LLM 三层识别，准确率高 |
-| **📊 结构化提取** | 金额 / 日期 / 路线 / 订单号 / 发票号，全字段提取 |
-| **🧳 出差聚合** | 自动按时间段+目的地归并同一次出差 |
-| **📑 Excel 报表** | 报销总览 + 费用明细 + 按供应商统计，三 Sheet 齐全 |
-| **📁 附件归档** | 原始 PDF / ZIP 自动下载，每条记录可溯源 |
-| **🧠 LLM 增强** | 可选 AI 增强，提升复杂场景识别率 |
-| **🔒 隐私优先** | 全部本地处理，只读邮箱权限，数据不出你的电脑 |
-
----
-
-## 🏆 支持的平台
-
-### ✈️ 机票
-去哪儿 · 携程 · 飞猪 · 各航司官网邮件
-
-### 🚄 火车票
-12306 · 智行
-
-### 🏨 酒店
-华住 · Booking · 携程 · 美团
-
-### 🚕 网约车
-滴滴 · 高德（曹操 / T3 / 及时 / 喜行 等）
-
-### 🧾 发票
-智慧发票 (cresvtv.cn) · 票根 (txffp.com)
-
-### 🎫 门票
-大麦
-
-> 新增平台只需加一行域名规则，欢迎 [贡献代码](CONTRIBUTING.md)！
-
----
-
-## 🚀 快速开始
-
-### Windows 一键测试版
-
-Windows 用户可以直接下载 GitHub Actions 生成的 `BizTrip-Agent-Windows.exe`，双击后自动打开本地网页，不需要安装 Python、Git 或使用 PowerShell。
-
-- 配置和日志保存在 `%LOCALAPPDATA%\BizTripAgent`
-- 报销文件保存在“文档\BizTrip Agent”
-- 页面提供“打开报销文件夹”和“安全停止程序”
-
-下载和使用步骤见 [Windows 一键测试版](docs/windows-one-click.md)。当前测试版未签名，Windows SmartScreen 可能要求用户确认运行。
-
-### 1. 先确认有 Python
-
-```bash
-python3 --version
+```text
+https://github.com/Hao-Miracle/BizTrip-Agent/tree/main/skills/biztrip-reimbursement
 ```
 
-如果提示找不到 `python3`，或版本低于 `3.8`，先安装 Python 3.8+。
-macOS 用户可以从 [python.org](https://www.python.org/downloads/) 安装，或使用 Homebrew：
+安装后直接提出任务：
 
-```bash
-brew install python
+```text
+帮我整理 2026 年 7 月的差旅报销。
 ```
 
-### 2. 一条命令安装并启动
+Skill 会：
+
+1. 理解你要处理的时间范围。
+2. 检测电脑上是否已有 BizTrip 本地引擎。
+3. 未安装时先说明用途，获得同意后再安装免费开源引擎。
+4. 引擎完成扫描、提取、行程归并和提交前核验。
+5. 遇到缺失、重复或冲突时，只询问必须由你确认的问题。
+6. 核验通过后交付报销包位置和总金额。
+
+Skill 不读取或展示邮箱授权码、API Key，也不会把核心识别逻辑交给不同 Agent 随意执行。详细边界见 [Agent Skill 使用指南](docs/skills.md)。
+
+---
+
+## 为什么不是直接生成一张表
+
+报销最危险的结果不是“没有结果”，而是得到一份看起来完整、实际有错误的表。
+
+BizTrip 在交付前检查：
+
+- 金额、日期和供应商是否完整有效。
+- 每条费用是否有对应原件。
+- 同一票据是否重复或存在编号冲突。
+- 费用是否可靠归入某次出差。
+- 行程日期和费用合计是否一致。
+
+发现问题时，任务状态会停在“需要确认”；只有所有质量门槛通过后，系统才生成可提交的报销包。
+
+---
+
+## 你最终得到什么
+
+```text
+报销包_20260731_143022/
+├── 差旅汇总_20260731_143022.xlsx
+└── 原件/
+    ├── 机票电子发票.pdf
+    ├── 酒店发票.pdf
+    └── 打车行程单.pdf
+```
+
+Excel 包含：
+
+| 工作表 | 内容 |
+|---|---|
+| **报销总览** | 行程、总金额和费用分类 |
+| **费用明细** | 日期、金额、供应商、路线、订单号和原件 |
+| **按供应商** | 各平台的笔数、金额和占比 |
+
+交付目录只包含本次报销真正引用的文件。运行状态、附件缓存和内部 JSON 留在系统目录，不要求普通用户处理。
+
+---
+
+## 本地处理，凭证不离开电脑
+
+- 邮箱通过标准 IMAP 读取，不发送、不删除、不修改邮件。
+- 邮箱授权码和可选 LLM API Key 只保存在用户本机。
+- PDF、ZIP、Excel 和任务状态均保存在本地目录。
+- Skill 不接收秘密配置，不替用户猜测财务数据。
+- 不配置 LLM 也能使用规则引擎；配置后只增强复杂邮件识别。
+
+支持 QQ、163、126、Gmail、Outlook 及其他标准 IMAP 邮箱。已覆盖 12306、去哪儿、携程、飞猪、航司邮件、酒店、滴滴、高德聚合打车、智慧发票、票根等常见来源。
+
+---
+
+## 没有 Agent 也能使用
+
+Skill 是首选获客和使用入口，但本地引擎本身可以独立运行。
+
+### Windows
+
+当前提供未签名的 Windows 测试版，双击后打开本地 Web 工作台，不需要安装 Python 或 Git。它用于公开测试，不是未来唯一的产品形态。
+
+查看 [Windows 测试版说明](docs/windows-one-click.md)。Windows SmartScreen 可能要求用户确认运行。
+
+### macOS 和 Linux
+
+正式 macOS 桌面安装包尚未发布。当前可以通过源码启动本地 Web 工作台：
 
 ```bash
 git clone https://github.com/Hao-Miracle/BizTrip-Agent.git && cd BizTrip-Agent && python3 start.py
 ```
 
-这条命令会自动创建本地运行环境并安装项目依赖。它不会替你安装 Python 本身，也不会替你生成邮箱授权码。
+这条命令会创建隔离运行环境并安装依赖，不会替用户安装 Python、开启邮箱 IMAP 或生成邮箱授权码。完整说明见 [安装指南](docs/installation.md)。
 
-### 3. 首次配置邮箱
-
-Web 页面打开后，按“第一次使用”提示操作：
-
-1. 打开邮箱设置，开启 IMAP/SMTP 服务
-2. 生成邮箱授权码或应用专用密码，不要使用登录密码
-3. 在页面填写邮箱账号和授权码，点击保存账号
-
-它会打开本地页面。账号只配置一次；填写本次报销期间后点击“开始生成”，系统会自动选择 IMAP 服务器并生成报销包。
-页面只显示准备状态和首次使用指引，不会展示邮箱授权码或 API Key。
-真实扫描会在后台运行，页面会显示任务状态、错误原因和生成文件。
-
-### 4. 以后再次启动
-
-```bash
-cd BizTrip-Agent && python3 start.py
-```
-
-### 5. 先跑 Demo（不需要邮箱）
-
-不熟悉命令行参数时，先用引导模式：
-
-```bash
-biztrip wizard
-```
-
-按提示选择生成 Demo、重新生成报表，或检查本地环境。
-
-```bash
-biztrip demo
-```
-
-这会用虚构差旅数据在 `output/` 目录生成一份示例 Excel，先确认工具链可用。
-
-想先看可审阅页面：
-
-```bash
-biztrip demo --review
-```
-
-### 4. 配置邮箱
-
-```bash
-biztrip init
-# 编辑 .env，填入邮箱和授权码
-```
-
-> 详细配置指南见 [安装文档](docs/installation.md)
-
-### 5. 扫描真实邮箱
-
-```bash
-biztrip scan
-```
-
-运行后按提示输入日期范围，直接回车扫描最近 60 封邮件。
-
-也可以直接传参数，适合重复运行或自动化：
-
-```bash
-biztrip scan --start 2026-07-01 --end 2026-07-29
-biztrip scan --count 100 --no-llm
-biztrip scan --output-dir output/monthly
-biztrip scan --review
-```
-
-> 旧入口仍可用：`python3 phase1/generate_report.py` 或 `python3 phase2/agent_report.py`。
-
-### 6. 运行测试
-
-```bash
-pip install -e ".[test]"
-pytest
-```
-
-测试使用虚构样本，不会连接邮箱。
+后续会提供与 Windows 对等的正式桌面分发；在签名、公证和自动更新完成前，不把未经验证的 macOS 安装包包装成“一键正式版”。
 
 ---
 
-## 📊 输出效果
+## 第一次连接邮箱
 
-运行后在 `output/` 目录生成：
+本地页面会引导用户：
 
-```
-output/
-└── 报销包_20260705_143022/
-    ├── 差旅汇总_20260705_143022.xlsx  ← 三 Sheet Excel 报表
-    └── 原件/                           ← 本次实际引用的凭证
-```
+1. 在邮箱设置中开启 IMAP 服务。
+2. 生成邮箱授权码或应用专用密码，不使用网页登录密码。
+3. 在本地页面填写邮箱账号和授权码。
+4. 选择本次报销的日期范围并开始生成。
 
-### Excel 报表结构
+系统会根据邮箱地址自动选择常见 IMAP 服务器。账号通常只需配置一次，页面不会回显授权码和 API Key。
 
-| Sheet | 内容 |
-|-------|------|
-| **报销总览** | 出差行程汇总 + 总额卡片 + 按类别汇总（分类配色） |
-| **费用明细** | 所有记录按日期排序，最高金额红色高亮，标注提取方法 |
-| **按供应商** | 各平台消费排名，隔行配色 |
+---
 
-只有全部材料通过质量核验后，系统才会生成报销包。Agent 状态和附件缓存保存在内部目录，不作为用户交付物；同一天重复生成不会覆盖旧报销包。
+## 可选 LLM 增强
 
-Web 页面会给出“可以提交”或“暂不建议提交”的结论。缺金额、缺日期、缺供应商、缺原件、未归入行程、疑似重复或同一单号数据冲突的记录会集中处理；问题未解决前不会提前生成一个看似可提交的 Excel。
+基础版不要求 LLM API Key。规则引擎可以完成邮箱分类、字段提取、附件处理、核验和报销包生成。
 
-维护人员需要恢复历史任务时，可以从内部状态重新生成：
+复杂邮件需要增强识别时，可以在本地 Web 页面填写兼容 OpenAI 协议的接口地址、API Key 和模型名称。LLM 失败或证据不足时，系统会回退到规则与确定性校验，不会因为模型输出而绕过提交门槛。
+
+支持用户自备的云端模型或本地模型，配置示例见 [.env.example](.env.example)。
+
+---
+
+## 免费边界与未来方向
+
+当前仓库提供免费的开源 Skill 和单人本地引擎，目标是让个人用户低成本完成第一份可信的报销包。
+
+未来的专业和团队能力将聚焦于持续服务，而不是把基础 Excel 导出重新收费：
+
+- 企业报销制度和合规规则核验。
+- 发票验真、异常检测和跨员工查重。
+- 多员工、多邮箱、团队权限和审计记录。
+- OA、ERP、财务系统及企业模板连接。
+- 托管模型调用、自动更新、私有部署和技术支持。
+
+这些能力仍在规划中，当前开源版本不宣称已经提供。
+
+---
+
+## 开发者入口
+
+安装项目命令：
 
 ```bash
-biztrip rebuild output/.biztrip/records_20260705_143022.json --review
+python3 -m venv .venv
+.venv/bin/python -m pip install -e ".[llm,test]"
 ```
 
----
+常用命令：
 
-## 🧠 LLM 增强（可选）
-
-默认不需要配置 LLM，规则模式可以完整生成报销包。想增强复杂邮件识别时，在 Web 页面展开“LLM 增强配置”，填写接口地址、API Key 和模型名称。
-
-高级用户也可以手动配置任意兼容 OpenAI 协议的服务商（含本地模型）：
-
-```env
-# DeepSeek（推荐，中文好）
-LLM_API_KEY=sk-xxx
-LLM_BASE_URL=https://api.deepseek.com/v1
-LLM_MODEL=deepseek-chat
-
-# Ollama 本地模型（完全免费，零联网）
-LLM_BASE_URL=http://localhost:11434/v1
-LLM_MODEL=qwen2.5:7b
+```bash
+.venv/bin/biztrip web
+.venv/bin/biztrip demo
+.venv/bin/biztrip scan --start 2026-07-01 --end 2026-07-31
+.venv/bin/biztrip agent status
+.venv/bin/python -m pytest
 ```
 
-更多服务商（通义千问 / GLM / Kimi / 火山引擎）配置见 [.env.example](.env.example)。
+Agent 通过稳定的 `start`、`status`、`answer` JSON 接口调用本地引擎，协议说明见 [Skill 结果结构](skills/biztrip-reimbursement/references/result-schema.md)。
 
-### 降级策略
+### 项目结构
 
-```
-🧠 LLM 分类 → 置信度不足 → 📋 域名匹配兜底
-🧠 LLM 提取 → 关键字段缺失 → 📋 正则提取兜底
-🧠 LLM 聚合 → 调用失败     → 📋 规则聚合兜底
-```
-
-**不配 API Key 完全可用**，自动降级纯规则引擎，零成本。
-
-### 成本参考
-
-| 模型 | 一次扫描（~5 封差旅邮件） |
-|------|--------------------------|
-| DeepSeek V3 | < 0.05 元 |
-| GLM-4-Flash | 0 元（免费额度） |
-| Ollama 本地 | 0 元 |
-
----
-
-## 🧩 Agent Skill
-
-项目提供一个开源薄 Skill：[`biztrip-reimbursement`](skills/biztrip-reimbursement/SKILL.md)。安装到支持 Skill 的 Agent 后，可以直接说：
-
-> 帮我整理 7 月的差旅报销。
-
-Skill 只负责理解时间范围、调用本地引擎、询问待确认信息和交付结果。邮箱读取、附件解析、金额核验和报销包生成仍由本地确定性引擎完成；Skill 不读取或展示邮箱授权码和 API Key。
-
-旧版分步骤 Skill 暂时保留用于兼容，不建议新用户使用。
-
-> 详细使用说明见 [Agent Skills 文档](docs/skills.md)
-
----
-
-## 🏗 项目架构
-
-```
+```text
 BizTrip-Agent/
-├── phase1/             ← 规则引擎（零依赖，必装）
-│   ├── fetch_emails.py      IMAP 邮箱连接
-│   ├── classify_emails.py   规则分类（域名+关键词）
-│   ├── extract_emails.py    结构化提取（正则+PDF）
-│   └── generate_report.py   全链路输出（Excel+附件）
-├── phase2/             ← Agent 引擎（LLM 增强，可选）
-│   ├── llm_classify.py      LLM 路由分类 + 规则降级
-│   ├── llm_extract.py       LLM 专用提取 + 正则降级
-│   ├── llm_aggregate.py     LLM 出差聚合 + 规则兜底
-│   └── agent_report.py      Agent 主入口
-├── skills/             ← 开源薄 Skill + 旧版兼容说明
-├── .trae/skills/       ← TRAE IDE 专用 Skill
-├── docs/               ← 使用文档
-├── wiki/               ← 知识库（产品/架构/决策/规格）
-├── raw/                ← 原始需求文档
-├── .env.example        ← 配置模板
-├── CHANGELOG.md        ← 变更日志
-├── CONTRIBUTING.md     ← 贡献指南
-├── LICENSE             ← MIT 许可证
-└── README.md
+├── biztrip_agent/      本地任务、核验、交付、Web 和 Agent 接口
+├── common/             邮件与通用解析能力
+├── phase1/             规则解析流程
+├── phase2/             可选 LLM 增强流程
+├── skills/             开源薄 Skill 和兼容文件
+├── tests/              本地与跨平台自动测试
+└── docs/               安装、使用和常见问题
 ```
 
----
+设计原则：
 
-## 💡 设计原则
-
-1. **数据准确是底线** — 每一行金额、每一条日期都与邮件原文一致
-2. **规则优先，零 API Key 可运行** — 默认基于规则引擎，零成本
-3. **两层可用** — 零配置保证基本可用，配 LLM 升级智能提取
-4. **隐私优先** — 所有数据本地处理，只读邮箱权限
-5. **附件可溯源** — 原始 PDF/ZIP 自动归档，每条记录都能查到原件
-6. **机票按附件拆分** — 往返机票拆为独立记录，不从一封邮件合并
+1. 数据准确是底线，模型不能绕过确定性核验。
+2. 能删除的用户步骤先删除，再简化和自动化。
+3. 核心引擎本地运行，Skill 只负责自然语言入口和任务编排。
+4. 原始凭证可追溯，内部状态不污染用户交付物。
+5. 新平台解析规则和缺陷修复欢迎通过 PR 贡献。
 
 ---
 
-## 🔭 路线图
+## 常见问题
 
-| 阶段 | 内容 | 状态 |
-|------|------|------|
-| **Phase 1** | 规则引擎 — 域名+关键词+正则，零 API Key | ✅ 完成 |
-| **Phase 1.5** | Agent 引擎 — LLM 增强 + 出差聚合 + 自动降级 | ✅ 完成 |
-| **Phase 2** | Web 应用 — OAuth 登录 + 可视化行程卡片 + 云同步 | 📋 规划中 |
-| **Phase 3** | 团队版 — 多人协作 + 审批流 + 财务系统对接 | 💡 构思中 |
+**必须配置 LLM API Key 吗？**
 
----
+不需要。LLM 是可选增强，不配置仍可使用规则模式。
 
-## ❓ 常见问题
+**会修改邮箱里的邮件吗？**
 
-**Q: 必须配置 LLM API Key 才能用吗？**  
-不用。不配也能完整使用，走纯规则引擎。LLM 是锦上添花的增强选项。
+不会。系统只读取邮件，不发送、不删除、不修改。
 
-**Q: 会修改我邮箱里的邮件吗？**  
-绝对不会。只有 IMAP 只读权限，只读取不修改、不删除、不发送。
+**为什么问题未解决时没有 Excel？**
 
-**Q: 支持哪些邮箱？**  
-QQ / 163 / 126 / Gmail / Outlook，理论上所有标准 IMAP 邮箱都支持。
+因为一份错误但看似完整的报销表比没有结果更危险。需要确认的问题解决后才生成报销包。
 
-**Q: 数据存在哪里？**  
-全部在你本地 `output/` 目录，不上传任何服务器。
+**macOS 为什么暂时没有安装包？**
 
-更多问题见 [FAQ](docs/faq.md)
+当前优先通过 Skill 和本地启动器验证产品闭环。正式 macOS 分发需要完成签名、公证和更新机制后再发布。
+
+更多问题见 [FAQ](docs/faq.md)。
 
 ---
 
-## 🤝 贡献
+## 参与项目
 
-欢迎各种形式的贡献！
+- [报告问题](../../issues/new?template=bug_report.md)
+- [提出产品建议](../../issues/new?template=feature_request.md)
+- [查看更新日志](CHANGELOG.md)
+- [阅读贡献指南](CONTRIBUTING.md)
 
-- 🐛 [报告 Bug](../../issues/new?template=bug_report.md)
-- 💡 [提功能建议](../../issues/new?template=feature_request.md)
-- 📝 改进文档
-- 🔧 提交代码修复或新功能
-- 🌐 新增平台解析器
+如果 BizTrip 帮你减少了整理报销材料的时间，可以 Star 仓库，让更多需要它的人找到这个项目。
 
-详细指南见 [贡献指南](CONTRIBUTING.md)
-
----
-
-## 📄 许可证
-
-MIT License — 详见 [LICENSE](LICENSE)
-
----
-
-<div align="center">
-
-如果这个工具帮你节省了时间，点个 ⭐ Star 支持一下吧！
-
-Made with ❤️ by [HAO-Miracle](https://github.com/Hao-Miracle)
-
-</div>
+MIT License，详见 [LICENSE](LICENSE)。
