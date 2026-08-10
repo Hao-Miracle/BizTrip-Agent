@@ -176,3 +176,33 @@ def test_questions_are_combined_per_record():
         "missing_vendor",
         "missing_attachment",
     }
+
+
+def test_verified_llm_evidence_is_used_after_rule_tools_fail():
+    records = [
+        {
+            "分类": "发票",
+            "金额": "",
+            "日期": "2026-08-03",
+            "供应商": "测试供应商",
+            "附件": "invoice.pdf",
+        }
+    ]
+
+    _trips, _initial, actions = run_recovery_loop(
+        records,
+        [],
+        attachment_recoverer=lambda _items: None,
+        evidence_resolver=lambda _record, _codes: [
+            {
+                "field": "金额",
+                "value": 88.0,
+                "confidence": 0.98,
+                "quote": "价税合计 88.00 元",
+            }
+        ],
+    )
+
+    assert records[0]["金额"] == 88.0
+    assert actions[-1]["tool"] == "llm_evidence_analysis"
+    assert actions[-1]["source"] == "verified_quote"

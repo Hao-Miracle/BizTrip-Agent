@@ -189,11 +189,12 @@ def _fallback_12306_amount(text):
     return max(amounts) if amounts else ''
 
 
-def enrich_record(record, subject, sender, attachments):
+def enrich_record(record, subject, sender, attachments, evidence_text=""):
     """Add context and inferred supplier fields to one extracted record."""
     record['附件'] = '; '.join(attachments) if attachments else ''
     record['主题'] = subject
     record['发件人'] = sender
+    record['_邮件正文'] = evidence_text[:7000]
     vendor = infer_vendor(record)
     if vendor and vendor != '其他':
         if record.get('分类') in {'发票', '酒店'}:
@@ -303,10 +304,10 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
                     if pdf_info.get('目的地'):
                         record['目的地'] = pdf_info['目的地']
                     record_attachments = _attachments_for_pdf(pdf['filename'], attachments)
-                    records.append(enrich_record(record, subject, sender, record_attachments))
+                    records.append(enrich_record(record, subject, sender, record_attachments, body))
                 continue
 
-        extract_result = enrich_record(extract_result, subject, sender, attachments)
+        extract_result = enrich_record(extract_result, subject, sender, attachments, body)
         records.append(extract_result)
 
         # 统计
@@ -329,12 +330,23 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
     from biztrip_agent.agent_task import run_recovery_loop
 
     trips = aggregate_trips(records, use_llm=use_llm)
+    if use_llm:
+        from phase2.llm_evidence import resolve_evidence
+
+        evidence_resolver = lambda record, codes: resolve_evidence(
+            record,
+            codes,
+            attachment_text=_attachment_text(record.get('附件', ''), attach_dir),
+        )
+    else:
+        evidence_resolver = None
     trips, initial_validation, recovery_actions = run_recovery_loop(
         records,
         trips,
         attachment_recoverer=lambda items: enrich_records_from_attachments(items, output_dir=output_dir),
         vendor_resolver=infer_vendor,
         trip_builder=lambda items: aggregate_trips(items, use_llm=use_llm),
+        evidence_resolver=evidence_resolver,
     )
 
     # ===== Step 5: 复核 + 建立可追溯的 Agent 任务状态 =====
@@ -347,6 +359,8 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
         initial_validation=initial_validation,
         recovery_actions=recovery_actions,
     )
+    for record in records:
+        record.pop('_邮件正文', None)
 
     # ===== Step 6: 生成 Excel =====
     total_amount = sum(r.get('金额', 0) or 0 for r in records)

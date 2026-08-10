@@ -77,6 +77,7 @@ def run_recovery_loop(
     attachment_recoverer=None,
     vendor_resolver=None,
     trip_builder=None,
+    evidence_resolver=None,
     max_rounds=2,
 ):
     """Plan recovery tools from open issues and stop when no progress is made."""
@@ -105,6 +106,13 @@ def run_recovery_loop(
 
         if not changed:
             break
+        if trip_builder:
+            trips = trip_builder(records)
+        validation = validate_reimbursement(records, trips)
+
+    evidence_actions = _resolve_with_evidence(records, validation, evidence_resolver)
+    actions.extend(evidence_actions)
+    if any(action["result"] == "recovered" for action in evidence_actions):
         if trip_builder:
             trips = trip_builder(records)
         validation = validate_reimbursement(records, trips)
@@ -225,6 +233,65 @@ def _execute_recovery(records, plan, attachment_recoverer=None, vendor_resolver=
         "reason": "找到已有证据" if recovered else "现有材料不足，未修改数据",
         "source": "existing_evidence" if recovered else "none",
     }
+
+
+def _resolve_with_evidence(records, validation, evidence_resolver):
+    if not evidence_resolver:
+        return []
+    recoverable = {"missing_amount", "missing_date", "missing_vendor"}
+    actions = []
+    for result in validation["records"]:
+        issue_codes = [
+            issue["code"]
+            for issue in result["issues"]
+            if issue["code"] in recoverable
+        ]
+        if not issue_codes:
+            continue
+        record = records[result["index"] - 1]
+        candidates = evidence_resolver(record, issue_codes) or []
+        recovered_fields = set()
+        for candidate in candidates:
+            field = candidate.get("field")
+            target = _target_field(record, field)
+            if not target or target in recovered_fields or record.get(target) not in (None, ""):
+                continue
+            record[target] = candidate.get("value")
+            recovered_fields.add(target)
+            actions.append(
+                {
+                    "action": "use_tool",
+                    "tool": "llm_evidence_analysis",
+                    "record_index": result["index"],
+                    "field": target,
+                    "result": "recovered",
+                    "value": candidate.get("value"),
+                    "confidence": candidate.get("confidence"),
+                    "evidence_quote": candidate.get("quote"),
+                    "reason": "LLM提出候选，本地程序已核对原文证据",
+                    "source": "verified_quote",
+                }
+            )
+        if not recovered_fields:
+            actions.append(
+                {
+                    "action": "use_tool",
+                    "tool": "llm_evidence_analysis",
+                    "record_index": result["index"],
+                    "result": "no_evidence",
+                    "reason": "未找到通过原文核验的高置信度候选",
+                    "source": "none",
+                }
+            )
+    return actions
+
+
+def _target_field(record, field):
+    if field in {"金额", "日期"}:
+        return field
+    if field == "供应商":
+        return "供应商" if record.get("分类") in {"发票", "酒店"} else "平台"
+    return ""
 
 
 def _step(step_id, title, status):
