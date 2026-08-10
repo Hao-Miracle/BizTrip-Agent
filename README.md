@@ -51,7 +51,7 @@ BizTrip 会在本地收集凭证、识别费用、归并出差行程；发现缺
 
 ## 第一步：先用 Skill 尝试
 
-BizTrip 的首选入口是开源薄 Skill：[`biztrip-reimbursement`](skills/biztrip-reimbursement/SKILL.md)。它把 BizTrip 接入你正在使用的 Agent，而不是要求你学习新的报销软件。
+BizTrip 的首选入口是开源薄 Skill：[`biztrip-reimbursement`](skills/biztrip-reimbursement/SKILL.md)。它把 BizTrip 接入支持 Skills 和本地脚本执行的 Agent，而不是要求你另外部署一套报销软件。
 
 把下面的地址交给支持 Skills 的 Agent，并让它安装：
 
@@ -68,13 +68,12 @@ https://github.com/Hao-Miracle/BizTrip-Agent/tree/main/skills/biztrip-reimbursem
 Skill 会：
 
 1. 理解你要处理的时间范围。
-2. 检测电脑上是否已有 BizTrip 本地引擎。
-3. 未安装时先说明用途，获得同意后再安装免费开源引擎。
-4. 只引导你在本地保存邮箱账号和授权码。
-5. 复用你当前 Agent 已有的模型能力，不要求重复填写模型 API Key。
-6. 汇总预计金额、费用分类和行程，并指出缺失凭证、字段或冲突。
+2. 直接运行 Skill 自带的只读邮箱体检组件，不再下载完整引擎或安装依赖。
+3. 只引导你在本地保存邮箱账号和授权码。
+4. 复用你当前 Agent 已有的模型能力，不要求重复填写模型 API Key。
+5. 汇总候选费用、预计金额和分类，并指出缺失金额或未发现附件的邮件。
 
-Skill 不读取或展示邮箱授权码，也不生成 Excel 和原件包。详细边界见 [Agent Skill 使用指南](docs/skills.md)。
+Skill 不读取或展示邮箱授权码，不下载原始附件，也不生成 Excel 和原件包。它会把有限的邮件主题、发件人提示、附件名称和正文摘要交给用户当前 Agent 分析。详细边界见 [Agent Skill 使用指南](docs/skills.md)。
 
 这一步用一份真实任务验证三件事：能发现多少费用、预计金额是否可信、缺失项是否有用。单次体检限制为最多 31 天或最近 60 封邮件，足够判断产品价值，又不会替代完整个人版。
 
@@ -211,11 +210,10 @@ python3 -m venv .venv
 .venv/bin/biztrip web
 .venv/bin/biztrip demo
 .venv/bin/biztrip scan --start 2026-07-01 --end 2026-07-31
-.venv/bin/biztrip agent audit --start 2026-07-01 --end 2026-07-31
 .venv/bin/python -m pytest
 ```
 
-公开 Skill 通过受限的 `audit` JSON 接口调用本地引擎，不具备完整报销包交付能力。协议说明见 [Skill 结果结构](skills/biztrip-reimbursement/references/result-schema.md)。
+公开 Skill 使用自带的零依赖只读脚本，不需要安装完整 BizTrip 引擎，也不具备完整报销包交付能力。协议说明见 [Skill 结果结构](skills/biztrip-reimbursement/references/result-schema.md)。
 
 ### 项目结构
 

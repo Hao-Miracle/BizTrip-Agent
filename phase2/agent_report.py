@@ -236,7 +236,6 @@ def main(
     output_dir=OUTPUT_DIR,
     interactive=True,
     review=False,
-    deliver=True,
 ):
     output_dir = os.path.abspath(output_dir)
     state_dir = os.path.join(output_dir, '.biztrip')
@@ -414,7 +413,7 @@ def main(
     total_amount = sum(r.get('金额', 0) or 0 for r in records)
     xlsx_path = None
     package_dir = None
-    if deliver and agent_task['status'] == 'completed':
+    if agent_task['status'] == 'completed':
         from biztrip_agent.delivery import create_delivery_package
 
         package = create_delivery_package(
@@ -460,8 +459,6 @@ def main(
     print(f'  💰 总金额: ¥{total_amount:,.2f}')
     if package_dir:
         print(f'  📦 报销包: {package_dir}')
-    elif not deliver:
-        print('  📋 体检完成，未生成最终报销包')
     else:
         print('  ⚠️ 仍有问题待确认，暂未生成报销包')
 

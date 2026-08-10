@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 ## [Unreleased]
 
 - **Skill 与个人版分层** — Skill 只提供邮箱报销体检，复用宿主 Agent 模型；完整 Excel 和原件包由本地个人版生成
-- **体检专用接口** — 新增受限 `agent audit` 协议，限制扫描范围且禁止生成最终报销包
+- **Skill 内置体检组件** — 删除二次下载完整引擎的流程，Skill 自带零第三方依赖的只读邮箱体检脚本
 
 > `0.1.0` 中的纯规则模式和多 Skill 记录仅描述当时版本。当前产品统一为“一个薄 Skill + Agent 模型 + 本地确定性引擎”。
 

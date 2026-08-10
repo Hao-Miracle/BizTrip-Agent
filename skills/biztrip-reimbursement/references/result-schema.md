@@ -1,37 +1,35 @@
 # Skill Audit Result Schema
 
-The audit command writes one JSON object using schema `biztrip.audit.v1`.
+The bundled audit script writes one JSON object using schema `biztrip.skill-audit.v1`.
 
-## Command
+## Commands
 
 ```bash
-biztrip agent audit --start YYYY-MM-DD --end YYYY-MM-DD
-biztrip agent audit --count 60
+python <SKILL_DIR>/scripts/audit_mailbox.py status
+python <SKILL_DIR>/scripts/audit_mailbox.py setup
+python <SKILL_DIR>/scripts/audit_mailbox.py audit --start YYYY-MM-DD --end YYYY-MM-DD
+python <SKILL_DIR>/scripts/audit_mailbox.py audit --count 60
 ```
 
 ## Successful audit
 
 - `ok`: `true`.
-- `operation`: `audit`.
 - `status`: `audit_ready`.
-- `summary.scan_label`: Processed date or mail range.
-- `summary.record_count`: Recognized reimbursement records.
-- `summary.trip_count`: Detected trips.
-- `summary.total_amount`: Estimated recognized total.
-- `summary.complete_record_count`: Records with no detected completeness issue.
-- `summary.affected_record_count`: Records affected by at least one issue.
+- `scan_label`: Processed date or mail range.
+- `summary.candidate_record_count`: Candidate reimbursement emails.
+- `summary.amount_known_count`: Candidates with an amount found in email text.
+- `summary.candidate_total`: Estimate using the first amount candidate per email.
 - `summary.issue_count`: Total detected issues.
-- `categories`: Counts and amounts grouped by expense category.
-- `trips`: Detected trip summaries.
-- `records`: A bounded preview of records and issue codes.
-- `records_truncated`: Whether additional records were omitted from the response.
-- `files.package_dir`: Always empty in Skill audit mode.
-- `files.excel`: Always empty in Skill audit mode.
+- `categories`: Counts and candidate amounts grouped by category.
+- `records`: At most 20 summaries with sender hints, subjects, amount candidates, attachment names, bounded body excerpts, and issue codes.
+- `records_truncated`: Whether more records were omitted.
+- `files.package_dir`: Always empty.
+- `files.excel`: Always empty.
 - `next_action`: `present_audit`.
 - `full_package.requires`: `local_personal_app`.
 
-The host Agent explains these facts but must not silently repair them. This schema intentionally has no answer submission or package delivery operation.
+The host Agent explains these facts but must not silently repair them. This schema intentionally has no answer submission, attachment parsing, or package delivery operation.
 
 ## Failure
 
-When `ok` is false, use `error.code` for routing and show `error.message` in plain language. `setup_required` means the user must save mailbox details on the local page. A Skill audit never requires a separate model API key.
+Use `error.code` for routing and show `error.message` in plain language. `setup_required` means the user must run the bundled local mailbox setup page. A Skill audit never downloads the full engine or requires a separate model API key.
