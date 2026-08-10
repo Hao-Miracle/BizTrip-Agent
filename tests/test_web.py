@@ -7,12 +7,14 @@ from http.server import ThreadingHTTPServer
 from biztrip_agent.cli import main
 from biztrip_agent.web import (
     BizTripWebHandler,
+    _agent_resolution_html,
     _friendly_error,
     _infer_imap_server,
     _env_path,
     _job_snapshot,
     _onboarding_html,
     _provider_setup_hint,
+    _parse_post_form,
     _preflight_scan,
     _read_env_values,
     _result_summary,
@@ -24,6 +26,7 @@ from biztrip_agent.web import (
     _summary_html,
     _start_job,
     _using_temporary_env,
+    _valid_attachment_content,
     _validate_scan_inputs,
     _write_env_values,
     readiness_status,
@@ -37,7 +40,7 @@ def test_web_home_contains_local_workflows(monkeypatch, tmp_path):
 
     assert "BizTrip Agent" in html
     assert 'action="/demo"' in html
-    assert 'action="/rebuild"' in html
+    assert 'action="/rebuild"' not in html
     assert 'action="/scan"' in html
     assert 'action="/init"' in html
     assert 'action="/config"' in html
@@ -57,7 +60,6 @@ def test_web_home_contains_local_workflows(monkeypatch, tmp_path):
     assert "提供商" not in html
     assert "准备状态" in html
     assert "诊断信息" in html
-    assert "records_YYYYMMDD_HHMMSS.json" in html
     assert "打开报销文件夹" in html
     assert "安全停止程序" in html
 
@@ -99,7 +101,9 @@ def test_web_hides_saved_results_until_account_is_ready(monkeypatch, tmp_path):
         '{"scan_label":"旧结果","summary":{"record_count":9,"trip_count":3,"total_amount":1234.5}}',
         encoding="utf-8",
     )
-    (output_dir / "差旅汇总_20260731_120000.xlsx").write_text("demo", encoding="utf-8")
+    package_dir = output_dir / "报销包_20260731_120000"
+    package_dir.mkdir()
+    (package_dir / "差旅汇总_20260731_120000.xlsx").write_text("demo", encoding="utf-8")
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("BIZTRIP_ENV_PATH", raising=False)
     monkeypatch.setattr("biztrip_agent.web._env_path", lambda: env_path)
@@ -324,6 +328,46 @@ def test_summary_html_shows_submission_verdict():
     assert "2 条记录需要处理" in html
     assert "已识别金额" in html
     assert "待处理记录" in html
+
+
+def test_agent_resolution_html_shows_only_editable_open_fields(tmp_path):
+    (tmp_path / "records_20260810.json").write_text(
+        '{"agent_task":{"questions":[{"record_index":1,'
+        '"issue_codes":["missing_amount","missing_attachment"],'
+        '"prompt":"请确认金额并补充原件",'
+        '"context":{"主题":"电子发票"}}]}}',
+        encoding="utf-8",
+    )
+
+    page = _agent_resolution_html(tmp_path)
+
+    assert "Agent 需要你确认" in page
+    assert "电子发票" in page
+    assert 'name="answer_1_missing_amount"' in page
+    assert 'name="answer_1_missing_attachment"' in page
+    assert 'enctype="multipart/form-data"' in page
+
+
+def test_multipart_parser_keeps_text_and_uploaded_bytes():
+    boundary = "biztrip-boundary"
+    body = (
+        f"--{boundary}\r\nContent-Disposition: form-data; name=\"json_path\"\r\n\r\n/tmp/result.json\r\n"
+        f"--{boundary}\r\nContent-Disposition: form-data; name=\"answer_1_missing_attachment\"; filename=\"invoice.pdf\"\r\n"
+        "Content-Type: application/pdf\r\n\r\nPDF-DATA\r\n"
+        f"--{boundary}--\r\n"
+    ).encode("utf-8")
+
+    form = _parse_post_form(f"multipart/form-data; boundary={boundary}", body)
+
+    assert form["json_path"] == "/tmp/result.json"
+    assert form["answer_1_missing_attachment"]["filename"] == "invoice.pdf"
+    assert form["answer_1_missing_attachment"]["data"] == b"PDF-DATA"
+
+
+def test_uploaded_attachment_content_must_match_extension():
+    assert _valid_attachment_content(".pdf", b"%PDF-1.7 content") is True
+    assert _valid_attachment_content(".png", b"\x89PNG\r\n\x1a\ncontent") is True
+    assert _valid_attachment_content(".pdf", b"renamed executable") is False
 
 
 def test_friendly_error_maps_common_failures():

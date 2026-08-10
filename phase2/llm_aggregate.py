@@ -79,7 +79,7 @@ def aggregate_trips(records, use_llm=True):
 
     # LLM 不可用：简单规则聚合（按日期排序后同一目的地归并）
     if client is None:
-        return _rule_aggregate(records)
+        return apply_manual_trip_assignments(_rule_aggregate(records), records)
 
     model = _get_model()
 
@@ -112,13 +112,40 @@ def aggregate_trips(records, use_llm=True):
         m = re.search(r'\[[\s\S]*\]', raw)
         if m:
             trips = json.loads(m.group(0))
-            return _normalize_trips(trips, records)
+            return apply_manual_trip_assignments(_normalize_trips(trips, records), records)
 
     except Exception:
         pass
 
     # LLM 失败，降级规则
-    return _rule_aggregate(records)
+    return apply_manual_trip_assignments(_rule_aggregate(records), records)
+
+
+def apply_manual_trip_assignments(trips, records):
+    """Keep unresolved records unassigned and make explicit user choices authoritative."""
+    by_id = {str(trip.get('trip_id')): trip for trip in trips}
+    controlled = [
+        record for record in records
+        if record.get('待确认行程') or record.get('行程归属') not in (None, '')
+    ]
+    for trip in trips:
+        trip['records'] = [record for record in trip.get('records', []) if record not in controlled]
+
+    for record in controlled:
+        if record.get('待确认行程'):
+            continue
+        trip = by_id.get(str(record.get('行程归属')))
+        if trip is not None:
+            trip.setdefault('records', []).append(record)
+
+    return refresh_trip_totals(trips)
+
+
+def refresh_trip_totals(trips):
+    """Refresh totals without asking the LLM to rebuild unchanged trip groups."""
+    for trip in trips:
+        trip['total'] = sum(record.get('金额', 0) or 0 for record in trip.get('records', []))
+    return trips
 
 
 def _normalize_trips(trips, records):

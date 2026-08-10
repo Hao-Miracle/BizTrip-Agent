@@ -129,7 +129,7 @@ def infer_vendor(record):
     return sender_name or '其他'
 
 
-def enrich_records_from_attachments(records, output_dir=OUTPUT_DIR):
+def enrich_records_from_attachments(records, output_dir=OUTPUT_DIR, text_reader=None):
     """Backfill fields that can be recovered from archived attachments."""
     attach_dir = os.path.join(str(output_dir), '附件')
     for record in records:
@@ -137,7 +137,11 @@ def enrich_records_from_attachments(records, output_dir=OUTPUT_DIR):
             continue
         if infer_vendor(record) != '12306':
             continue
-        text = _attachment_text(record.get('附件', ''), attach_dir)
+        text = (
+            text_reader(record.get('附件', ''))
+            if text_reader
+            else _attachment_text(record.get('附件', ''), attach_dir)
+        )
         amount = _fallback_12306_amount(text)
         if amount:
             record['金额'] = amount
@@ -189,11 +193,29 @@ def _fallback_12306_amount(text):
     return max(amounts) if amounts else ''
 
 
-def enrich_record(record, subject, sender, attachments):
+def _cached_attachment_matcher(attachment_dir):
+    from biztrip_agent.attachment_match import _attachment_text as read_attachment_text
+    from biztrip_agent.attachment_match import find_unlinked_attachment
+
+    cache = {}
+
+    def cached_read(path):
+        key = str(path.resolve())
+        if key not in cache:
+            cache[key] = read_attachment_text(path)
+        return cache[key]
+
+    return lambda record, records: find_unlinked_attachment(
+        record, records, attachment_dir, text_reader=cached_read
+    )
+
+
+def enrich_record(record, subject, sender, attachments, evidence_text=""):
     """Add context and inferred supplier fields to one extracted record."""
     record['附件'] = '; '.join(attachments) if attachments else ''
     record['主题'] = subject
     record['发件人'] = sender
+    record['_邮件正文'] = evidence_text[:7000]
     vendor = infer_vendor(record)
     if vendor and vendor != '其他':
         if record.get('分类') in {'发票', '酒店'}:
@@ -208,7 +230,8 @@ def enrich_record(record, subject, sender, attachments):
 
 def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, interactive=True, review=False):
     output_dir = os.path.abspath(output_dir)
-    attach_dir = os.path.join(output_dir, '附件')
+    state_dir = os.path.join(output_dir, '.biztrip')
+    attach_dir = os.path.join(state_dir, '附件')
     os.makedirs(attach_dir, exist_ok=True)
 
     email_addr, auth_code, imap_server, imap_port = get_email_config()
@@ -274,8 +297,6 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
         sender = decode_str(msg['From'])
         subject = decode_str(msg['Subject'])
         body = get_email_text(msg)
-        attachments = save_attachments(msg, idx, attach_dir=attach_dir)
-
         # 分类（LLM 或规则）
         classify_result = classify_email(subject, sender, body[:500], use_llm=use_llm)
 
@@ -283,6 +304,8 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
         method = classify_result.get('method', '规则')
         if category == '不相关':
             continue
+
+        attachments = save_attachments(msg, idx, attach_dir=attach_dir)
 
         # 提取（LLM 或规则）
         extract_result = extract_record(body, subject, category, use_llm=use_llm)
@@ -303,10 +326,10 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
                     if pdf_info.get('目的地'):
                         record['目的地'] = pdf_info['目的地']
                     record_attachments = _attachments_for_pdf(pdf['filename'], attachments)
-                    records.append(enrich_record(record, subject, sender, record_attachments))
+                    records.append(enrich_record(record, subject, sender, record_attachments, body))
                 continue
 
-        extract_result = enrich_record(extract_result, subject, sender, attachments)
+        extract_result = enrich_record(extract_result, subject, sender, attachments, body)
         records.append(extract_result)
 
         # 统计
@@ -325,20 +348,98 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
         print('\n未发现出差相关邮件')
         return
 
-    enrich_records_from_attachments(records, output_dir=output_dir)
+    for index, record in enumerate(records, 1):
+        record.setdefault('记录ID', f'R{index:04d}')
 
-    # ===== Step 4: 出差聚合 =====
+    # ===== Step 4: 首次核验 + 自动补救 =====
+    from biztrip_agent.agent_task import run_recovery_loop
+    from phase2.llm_aggregate import refresh_trip_totals
+
+    attachment_text_cache = {}
+
+    def cached_attachment_text(attachment_value):
+        key = str(attachment_value or '')
+        if key not in attachment_text_cache:
+            attachment_text_cache[key] = _attachment_text(key, attach_dir)
+        return attachment_text_cache[key]
+
     trips = aggregate_trips(records, use_llm=use_llm)
+    if use_llm:
+        from phase2.llm_evidence import resolve_evidence
 
-    # ===== Step 5: 生成 Excel =====
+        evidence_resolver = lambda record, codes: resolve_evidence(
+            record,
+            codes,
+            attachment_text=cached_attachment_text(record.get('附件', '')),
+        )
+    else:
+        evidence_resolver = None
+    trips, initial_validation, recovery_actions = run_recovery_loop(
+        records,
+        trips,
+        attachment_recoverer=lambda items: enrich_records_from_attachments(
+            items, output_dir=state_dir, text_reader=cached_attachment_text
+        ),
+        vendor_resolver=infer_vendor,
+        trip_builder=lambda items: aggregate_trips(items, use_llm=use_llm),
+        trip_refresher=refresh_trip_totals,
+        evidence_resolver=evidence_resolver,
+        attachment_matcher=_cached_attachment_matcher(attach_dir),
+    )
+
+    # ===== Step 5: 复核 + 建立可追溯的 Agent 任务状态 =====
+    from biztrip_agent.agent_task import build_agent_task
+    agent_task = build_agent_task(
+        records,
+        trips,
+        goal=f'整理并核验 {scan_label} 的差旅报销材料',
+        use_llm=use_llm,
+        initial_validation=initial_validation,
+        recovery_actions=recovery_actions,
+        attachment_dir=attach_dir,
+    )
+    for record in records:
+        record.pop('_邮件正文', None)
+
+    # ===== Step 6: 只在核验通过后生成最小报销包 =====
     total_amount = sum(r.get('金额', 0) or 0 for r in records)
-    xlsx_path = _generate_excel(records, trips, total_amount, scan_label, output_dir=output_dir, use_llm=use_llm)
+    xlsx_path = None
+    package_dir = None
+    if agent_task['status'] == 'completed':
+        from biztrip_agent.delivery import create_delivery_package
+
+        package = create_delivery_package(
+            records,
+            trips,
+            output_dir,
+            attach_dir,
+            scan_label,
+            use_llm,
+        )
+        xlsx_path = package['excel_path']
+        package_dir = package['package_dir']
     review_path = None
     if review:
         from biztrip_agent.review import generate_review_html
-        review_path = generate_review_html(records, trips, output_dir, scan_label, excel_path=xlsx_path)
+        review_path = generate_review_html(
+            records,
+            trips,
+            state_dir,
+            scan_label,
+            excel_path=xlsx_path,
+            attachment_dir=attach_dir,
+        )
     from biztrip_agent.results import write_results_json
-    results_path = write_results_json(records, trips, output_dir, scan_label, xlsx_path=xlsx_path, review_path=review_path)
+    results_path = write_results_json(
+        records,
+        trips,
+        state_dir,
+        scan_label,
+        xlsx_path=xlsx_path,
+        review_path=review_path,
+        agent_task=agent_task,
+        attachment_dir=attach_dir,
+    )
 
     # ===== 打印结果 =====
     print(f'\n{"=" * 60}')
@@ -348,9 +449,10 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
         print(f'  🧠 LLM 提取: {llm_count} 条  📋 规则降级: {rule_count} 条')
     print(f'  ✈️  识别到 {len(trips)} 次出差/旅行')
     print(f'  💰 总金额: ¥{total_amount:,.2f}')
-    print(f'  📊 Excel: {xlsx_path}')
-    print(f'  🧾 JSON: {results_path}')
-    print(f'  📎 附件: {attach_dir}/')
+    if package_dir:
+        print(f'  📦 报销包: {package_dir}')
+    else:
+        print('  ⚠️ 仍有问题待确认，暂未生成报销包')
 
     if trips:
         print(f'\n📋 出差行程汇总:')
@@ -362,8 +464,10 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
         'records': records,
         'trips': trips,
         'xlsx_path': xlsx_path,
+        'package_dir': str(package_dir) if package_dir else None,
         'review_path': str(review_path) if review_path else None,
         'results_path': str(results_path),
+        'agent_task': agent_task,
     }
 
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "BizTrip Reimbursement"
+  short_description: "Turn travel emails into verified reimbursement packages"
+  default_prompt: "帮我整理指定时间范围内的差旅报销，并在核验通过后交付报销包。"

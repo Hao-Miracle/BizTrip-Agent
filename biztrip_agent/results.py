@@ -27,14 +27,25 @@ def unique_output_path(directory, stem, suffix):
         index += 1
 
 
-def write_results_json(records, trips, output_dir, scan_label, xlsx_path=None, review_path=None):
+def write_results_json(
+    records,
+    trips,
+    output_dir,
+    scan_label,
+    xlsx_path=None,
+    review_path=None,
+    agent_task=None,
+    attachment_dir=None,
+):
     """Write scan results to a JSON file and return its path."""
     from biztrip_agent.validation import validate_reimbursement
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    total = sum(record.get("金额", 0) or 0 for record in records)
-    validation = validate_reimbursement(records, trips)
+    public_records = _without_private_fields(records)
+    public_trips = _without_private_fields(trips)
+    total = sum(record.get("金额", 0) or 0 for record in public_records)
+    validation = validate_reimbursement(public_records, public_trips, attachment_dir=attachment_dir)
     path = unique_output_path(output_dir, "records", ".json")
 
     payload = {
@@ -42,8 +53,8 @@ def write_results_json(records, trips, output_dir, scan_label, xlsx_path=None, r
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "scan_label": scan_label,
         "summary": {
-            "record_count": len(records),
-            "trip_count": len(trips),
+            "record_count": len(public_records),
+            "trip_count": len(public_trips),
             "total_amount": total,
             "submission_status": validation["status"],
             "can_submit": validation["can_submit"],
@@ -55,12 +66,25 @@ def write_results_json(records, trips, output_dir, scan_label, xlsx_path=None, r
             "excel": str(xlsx_path) if xlsx_path else "",
             "review": str(review_path) if review_path else "",
         },
-        "records": records,
-        "trips": trips,
+        "records": public_records,
+        "trips": public_trips,
         "validation": validation,
+        "agent_task": agent_task or {},
     }
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     return path
+
+
+def _without_private_fields(value):
+    if isinstance(value, dict):
+        return {
+            key: _without_private_fields(item)
+            for key, item in value.items()
+            if not str(key).startswith("_")
+        }
+    if isinstance(value, list):
+        return [_without_private_fields(item) for item in value]
+    return value
 
 
 def load_results_json(path):

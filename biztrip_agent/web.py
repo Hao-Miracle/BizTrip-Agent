@@ -5,6 +5,7 @@ import html
 import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -14,6 +15,8 @@ import traceback
 import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from email import policy
+from email.parser import BytesParser
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -21,6 +24,7 @@ from urllib.parse import parse_qs, urlparse
 JOBS = {}
 JOBS_LOCK = threading.Lock()
 MAX_JOBS = 20
+MAX_POST_BYTES = 25 * 1024 * 1024
 
 
 def run_server(host="127.0.0.1", port=8765, open_browser=True):
@@ -64,8 +68,11 @@ class BizTripWebHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         length = int(self.headers.get("Content-Length", "0"))
-        body = self.rfile.read(length).decode("utf-8")
-        form = {key: values[-1] for key, values in parse_qs(body).items()}
+        if length > MAX_POST_BYTES:
+            self._send_html(render_home(error="上传文件不能超过 20 MB。"), status=413)
+            return
+        body = self.rfile.read(length)
+        form = _parse_post_form(self.headers.get("Content-Type", ""), body)
         if self.path == "/demo":
             self._send_html(_run_demo(form))
             return
@@ -83,6 +90,9 @@ class BizTripWebHandler(BaseHTTPRequestHandler):
             return
         if self.path == "/config":
             self._send_html(_run_config(form))
+            return
+        if self.path == "/resolve":
+            self._send_html(_run_resolve(form))
             return
         if self.path == "/open-output":
             self._send_html(_run_open_output())
@@ -128,8 +138,11 @@ def render_home(message=None, error=None, files=None, result_summary=None):
     readiness_html = _readiness_html(readiness_status())
     config_html = _config_html()
     show_saved_results = account_ready and not _using_temporary_env()
+    saved_result = _latest_result_payload(_default_output_dir()) if show_saved_results else None
     recent_html = _recent_results_html() if show_saved_results else ""
-    summary_html = _summary_html(result_summary) if result_summary or show_saved_results else ""
+    saved_summary = _result_summary(payload_result=saved_result) if saved_result else None
+    summary_html = _summary_html(result_summary or saved_summary) if result_summary or saved_summary else ""
+    resolution_html = _agent_resolution_html(payload_result=saved_result) if saved_result else ""
     return f"""<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -183,7 +196,7 @@ def render_home(message=None, error=None, files=None, result_summary=None):
       font: inherit;
       background: #fff;
     }}
-    input[type="number"] {{
+    input[type="number"], input[type="date"], select {{
       width: 100%;
       min-height: 38px;
       border: 1px solid var(--line);
@@ -324,6 +337,7 @@ def render_home(message=None, error=None, files=None, result_summary=None):
     {message_html}
     {files_html}
     {summary_html}
+    {resolution_html}
     {recent_html}
     <section id="job-panel" class="job">
       <h2>任务进度</h2>
@@ -797,21 +811,29 @@ def _latest_files(output_dir):
     output_dir = Path(output_dir)
     if not output_dir.exists():
         return []
-    names = ["*.xlsx", "review_*.html"]
+    names = ["报销包_*/*.xlsx"]
     files = []
     for pattern in names:
         files.extend(output_dir.glob(pattern))
     return sorted(files, key=lambda path: path.stat().st_mtime, reverse=True)[:6]
 
 
-def _result_summary(output_dir):
-    records = _latest_records_json(output_dir)
-    if not records:
+def _latest_result_payload(output_dir):
+    records_path = _latest_records_json(output_dir)
+    if not records_path:
         return None
     try:
-        payload = json.loads(records.read_text(encoding="utf-8"))
+        payload = json.loads(records_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return None
+    return records_path, payload
+
+
+def _result_summary(output_dir=None, payload_result=None):
+    payload_result = payload_result or _latest_result_payload(output_dir)
+    if not payload_result:
+        return None
+    records, payload = payload_result
     summary = payload.get("summary", {})
     return {
         "record_count": summary.get("record_count", 0),
@@ -827,12 +849,236 @@ def _result_summary(output_dir):
     }
 
 
+def _agent_resolution_html(output_dir=None, payload_result=None):
+    payload_result = payload_result or _latest_result_payload(output_dir or _default_output_dir())
+    if not payload_result:
+        return ""
+    records_path, payload = payload_result
+    questions = payload.get("agent_task", {}).get("questions", [])
+    editable = {
+        "missing_amount",
+        "missing_date",
+        "missing_vendor",
+        "unassigned_trip",
+        "possible_duplicate",
+        "identifier_conflict",
+        "missing_attachment",
+        "unreadable_attachment",
+    }
+    issue_labels = {
+        "missing_amount": "请确认正确金额。",
+        "missing_date": "请确认发生日期。",
+        "missing_vendor": "请确认实际收款方。",
+        "unassigned_trip": "请选择这条费用所属的行程。",
+        "possible_duplicate": "如果这是重复记录，请将它从本次报销排除。",
+        "identifier_conflict": "这条记录与相同票据编号的数据冲突，请确认是否排除。",
+        "missing_attachment": "Agent没有找到原件，请上传对应凭证。",
+        "unreadable_attachment": "现有原件无法读取，请重新上传原始凭证。",
+    }
+    rows = []
+    for question in questions:
+        codes = [code for code in question.get("issue_codes", []) if code in editable]
+        if not codes:
+            continue
+        index = int(question.get("record_index", 0))
+        context = question.get("context", {})
+        title = context.get("主题") or context.get("分类") or f"第 {index} 条记录"
+        prompt = " ".join(issue_labels[code] for code in codes)
+        fields = []
+        if "missing_amount" in codes:
+            fields.append(
+                f'<label for="answer-{index}-amount">金额</label>'
+                f'<input id="answer-{index}-amount" name="answer_{index}_missing_amount" type="number" min="0.01" step="0.01">'
+            )
+        if "missing_date" in codes:
+            fields.append(
+                f'<label for="answer-{index}-date">日期</label>'
+                f'<input id="answer-{index}-date" name="answer_{index}_missing_date" type="date">'
+            )
+        if "missing_vendor" in codes:
+            fields.append(
+                f'<label for="answer-{index}-vendor">供应商</label>'
+                f'<input id="answer-{index}-vendor" name="answer_{index}_missing_vendor" type="text">'
+            )
+        if "unassigned_trip" in codes:
+            choices = [
+                option for option in question.get("options", [])
+                if option.get("issue_code") == "unassigned_trip"
+            ]
+            if choices:
+                options_html = '<option value="">请选择行程</option>' + "".join(
+                    f'<option value="{html.escape(str(option.get("value", "")))}">'
+                    f'{html.escape(str(option.get("label", "")))}</option>'
+                    for option in choices
+                )
+                fields.append(
+                    f'<label for="answer-{index}-trip">所属行程</label>'
+                    f'<select id="answer-{index}-trip" name="answer_{index}_unassigned_trip">{options_html}</select>'
+                )
+        duplicate_code = next(
+            (code for code in ("possible_duplicate", "identifier_conflict") if code in codes),
+            None,
+        )
+        if duplicate_code:
+            fields.append(
+                '<label class="check">'
+                f'<input name="answer_{index}_{duplicate_code}" type="checkbox" value="exclude"> '
+                '从本次报销排除这条记录</label>'
+            )
+        attachment_issue = next(
+            (code for code in ("missing_attachment", "unreadable_attachment") if code in codes),
+            None,
+        )
+        if attachment_issue:
+            fields.append(
+                f'<label for="answer-{index}-attachment">报销原件</label>'
+                f'<input id="answer-{index}-attachment" name="answer_{index}_{attachment_issue}" '
+                'type="file" accept=".pdf,.zip,.jpg,.jpeg,.png,.heic">'
+            )
+        rows.append(
+            '<div class="result-metric">'
+            f'<strong>{html.escape(str(title))}</strong>'
+            f'<span>{html.escape(prompt)}</span>'
+            f'{"".join(fields)}'
+            '</div>'
+        )
+    if not rows:
+        return ""
+    return (
+        '<section class="results">'
+        '<h2>Agent 需要你确认</h2>'
+        '<div class="sub">只填写你能确认的信息，留空的项目会继续保持待处理。</div>'
+        '<form method="post" action="/resolve" enctype="multipart/form-data">'
+        f'<input name="json_path" type="hidden" value="{html.escape(str(records_path.resolve()))}">'
+        f'<div class="result-grid">{"".join(rows)}</div>'
+        '<button type="submit">确认并重新核验</button>'
+        '</form>'
+        '</section>'
+    )
+
+
+def _run_resolve(form):
+    latest = _latest_records_json(_default_output_dir())
+    requested = Path(form.get("json_path", "")).expanduser()
+    if not latest or requested.resolve() != latest.resolve():
+        return render_home(error="任务结果已经变化，请刷新页面后重新确认。")
+
+    payload_result = _latest_result_payload(latest.parent)
+    if not payload_result or payload_result[0].resolve() != latest.resolve():
+        return render_home(error="无法读取当前任务，请刷新后重试。")
+    current_payload = payload_result[1]
+    answers = {}
+    saved_uploads = []
+    for key, value in form.items():
+        if not key.startswith("answer_"):
+            continue
+        parts = key.split("_", 2)
+        if len(parts) != 3 or not parts[1].isdigit():
+            continue
+        index = int(parts[1])
+        issue_code = parts[2]
+        if isinstance(value, dict) and "data" in value:
+            try:
+                saved_name, saved_path = _save_uploaded_attachment(
+                    value, latest, index, issue_code, payload=current_payload
+                )
+            except ValueError as exc:
+                return render_home(error=str(exc))
+            answers[(index, issue_code)] = saved_name
+            saved_uploads.append(saved_path)
+        else:
+            answers[(index, issue_code)] = value
+    try:
+        from biztrip_agent.resolution import resolve_results
+
+        result = resolve_results(latest, answers)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        for path in saved_uploads:
+            path.unlink(missing_ok=True)
+        return render_home(error=str(exc))
+    return render_home(
+        message="已采用你的确认并重新核验。",
+        files=[path for path in [result["xlsx_path"]] if path],
+        result_summary=_result_summary(latest.parent),
+    )
+
+
+def _parse_post_form(content_type, body):
+    if not content_type.lower().startswith("multipart/form-data"):
+        text = body.decode("utf-8")
+        return {key: values[-1] for key, values in parse_qs(text).items()}
+    message = BytesParser(policy=policy.default).parsebytes(
+        f"Content-Type: {content_type}\r\nMIME-Version: 1.0\r\n\r\n".encode("utf-8") + body
+    )
+    form = {}
+    for part in message.iter_parts():
+        name = part.get_param("name", header="content-disposition")
+        if not name:
+            continue
+        filename = part.get_filename()
+        data = part.get_payload(decode=True) or b""
+        if filename:
+            if data:
+                form[name] = {"filename": filename, "data": data}
+        else:
+            charset = part.get_content_charset() or "utf-8"
+            form[name] = data.decode(charset)
+    return form
+
+
+def _save_uploaded_attachment(upload, records_path, record_index, issue_code, payload=None):
+    if issue_code not in {"missing_attachment", "unreadable_attachment"}:
+        raise ValueError("这个问题不接受文件上传。")
+    if payload is None:
+        try:
+            payload = json.loads(records_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ValueError("无法读取当前任务，请刷新后重试。") from exc
+    allowed = any(
+        int(question.get("record_index", 0)) == record_index
+        and issue_code in question.get("issue_codes", [])
+        for question in payload.get("agent_task", {}).get("questions", [])
+    )
+    if not allowed:
+        raise ValueError("这条记录当前不需要上传原件。")
+
+    data = upload.get("data", b"")
+    original = Path(str(upload.get("filename", ""))).name
+    suffix = Path(original).suffix.lower()
+    if not data or len(data) > 20 * 1024 * 1024:
+        raise ValueError("原件文件必须小于 20 MB。")
+    if suffix not in {".pdf", ".zip", ".jpg", ".jpeg", ".png", ".heic"}:
+        raise ValueError("只支持 PDF、ZIP、JPG、PNG 或 HEIC 原件。")
+    if not _valid_attachment_content(suffix, data):
+        raise ValueError("文件内容与扩展名不一致，请选择原始凭证文件。")
+    safe_stem = re.sub(r"[^0-9A-Za-z._-]+", "_", Path(original).stem).strip("._") or "attachment"
+    filename = f"user_R{record_index:04d}_{uuid.uuid4().hex[:8]}_{safe_stem}{suffix}"
+    attachment_dir = records_path.parent / "附件"
+    attachment_dir.mkdir(parents=True, exist_ok=True)
+    path = attachment_dir / filename
+    path.write_bytes(data)
+    return filename, path
+
+
+def _valid_attachment_content(suffix, data):
+    signatures = {
+        ".pdf": data.lstrip().startswith(b"%PDF"),
+        ".zip": data.startswith(b"PK\x03\x04") or data.startswith(b"PK\x05\x06"),
+        ".jpg": data.startswith(b"\xff\xd8\xff"),
+        ".jpeg": data.startswith(b"\xff\xd8\xff"),
+        ".png": data.startswith(b"\x89PNG\r\n\x1a\n"),
+        ".heic": b"ftyp" in data[:32],
+    }
+    return signatures.get(suffix, False)
+
+
 def _latest_records_json(output_dir=None):
     roots = [Path(output_dir)] if output_dir else [Path("output"), Path(__file__).resolve().parents[1] / "output"]
     files = []
     for root in roots:
         if root.exists():
             files.extend(root.glob("records_*.json"))
+            files.extend((root / ".biztrip").glob("records_*.json"))
     if not files:
         return None
     return max(files, key=lambda path: path.stat().st_mtime)
@@ -1048,7 +1294,6 @@ def _scan_html(configured):
         </div>
         <input name="count" type="hidden" value="60">
         <input name="output_dir" type="hidden" value="{output_dir}">
-        <input name="review" type="hidden" value="on">
         <button type="submit"{disabled}>开始生成</button>
       </form>
       <details>
@@ -1132,15 +1377,6 @@ def _tools_html():
             <h2>停止程序</h2>
             <div class="sub">完成测试后安全停止本地服务。</div>
             <button type="submit">安全停止程序</button>
-          </form>
-          <form method="post" action="/rebuild">
-            <h2>从 JSON 重建</h2>
-            <label for="json-path">records_YYYYMMDD_HHMMSS.json 路径</label>
-            <input id="json-path" name="json_path" type="text" placeholder="output/records_20260729_143022.json">
-            <label for="rebuild-output">输出目录</label>
-            <input id="rebuild-output" name="output_dir" type="text" placeholder="留空则输出到 JSON 所在目录">
-            <label class="check"><input name="review" type="checkbox" checked> 同时生成审阅页面</label>
-            <button type="submit">重建报表</button>
           </form>
         </div>
       </details>

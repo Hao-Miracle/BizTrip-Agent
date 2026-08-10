@@ -59,6 +59,21 @@ def main(argv=None):
         "--output-dir",
         help="Directory for regenerated files. Defaults to the JSON file directory.",
     )
+    agent_parser = subparsers.add_parser("agent", help="Machine-readable interface for Agent skills.")
+    agent_commands = agent_parser.add_subparsers(dest="agent_command", required=True)
+    agent_start = agent_commands.add_parser("start", help="Start a reimbursement task and return JSON.")
+    agent_start.add_argument("--start", help="Start date in YYYY-MM-DD format.")
+    agent_start.add_argument("--end", help="End date in YYYY-MM-DD format.")
+    agent_start.add_argument("--count", type=int, default=60)
+    agent_start.add_argument("--no-llm", action="store_true")
+    agent_start.add_argument("--output-dir", default=str(OUTPUT_DIR))
+    agent_status = agent_commands.add_parser("status", help="Return the latest task as JSON.")
+    agent_status.add_argument("--task", help="Specific records JSON path.")
+    agent_status.add_argument("--output-dir", default=str(OUTPUT_DIR))
+    agent_answer = agent_commands.add_parser("answer", help="Submit user confirmations from JSON.")
+    agent_answer.add_argument("--task", required=True, help="Current records JSON path.")
+    agent_answer.add_argument("--answers-file", required=True, help="UTF-8 JSON file containing answers.")
+    agent_answer.add_argument("--output-dir")
 
     args = parser.parse_args(argv)
     command = args.command or "demo"
@@ -77,9 +92,49 @@ def main(argv=None):
         return scan(args)
     if command == "rebuild":
         return rebuild(args)
+    if command == "agent":
+        return agent_command(args)
 
     parser.print_help()
     return 2
+
+
+def agent_command(args):
+    """Run the stable JSON-only interface used by thin Agent skills."""
+    from biztrip_agent.agent_interface import answer_task, start_task, task_status
+
+    if args.agent_command == "start":
+        if args.count < 1 or any(
+            value and not _is_date(value) for value in (args.start, args.end)
+        ):
+            payload = {
+                "schema_version": "biztrip.agent-interface.v1",
+                "operation": "start",
+                "ok": False,
+                "status": "failed",
+                "error": {"code": "invalid_range", "message": "日期必须使用 YYYY-MM-DD，count 必须大于 0。"},
+                "next_action": "inspect_error",
+            }
+        else:
+            payload = start_task(args.start, args.end, args.count, args.no_llm, args.output_dir)
+    elif args.agent_command == "status":
+        payload = task_status(args.task, args.output_dir)
+    else:
+        try:
+            answers = json.loads(Path(args.answers_file).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            payload = {
+                "schema_version": "biztrip.agent-interface.v1",
+                "operation": "answer",
+                "ok": False,
+                "status": "failed",
+                "error": {"code": "answers_unreadable", "message": str(exc)[:500]},
+                "next_action": "inspect_error",
+            }
+        else:
+            payload = answer_task(args.task, answers, args.output_dir)
+    print(json.dumps(payload, ensure_ascii=False))
+    return 0 if payload.get("ok") else 1
 
 
 def demo(output_dir, review=False):
@@ -338,8 +393,6 @@ def scan(args):
     )
     if result and result.get("review_path"):
         print(f"Review: {result['review_path']}")
-    if result and result.get("results_path"):
-        print(f"JSON: {result['results_path']}")
     return 0
 
 

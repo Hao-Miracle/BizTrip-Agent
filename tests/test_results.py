@@ -10,7 +10,13 @@ from phase2.agent_report import _attachments_for_pdf, _build_search_query, enric
 
 def test_write_results_json_persists_summary_and_records(tmp_path):
     records = [
-        {"分类": "机票", "金额": 1280.0, "日期": "2026-07-10", "平台": "去哪儿网"},
+        {
+            "分类": "机票",
+            "金额": 1280.0,
+            "日期": "2026-07-10",
+            "平台": "去哪儿网",
+            "_邮件正文": "不得写入结果的临时证据",
+        },
         {"分类": "酒店", "金额": 598.0, "日期": "2026-07-10", "平台": "华住酒店"},
     ]
     trips = [
@@ -33,6 +39,7 @@ def test_write_results_json_persists_summary_and_records(tmp_path):
         "2026-07-01~2026-07-29",
         xlsx_path=tmp_path / "report.xlsx",
         review_path=tmp_path / "review.html",
+        agent_task={"schema_version": "biztrip.agent-task.v1", "status": "needs_user_input"},
     )
 
     assert path.name.startswith("records_")
@@ -48,6 +55,9 @@ def test_write_results_json_persists_summary_and_records(tmp_path):
     assert payload["summary"]["affected_count"] == 2
     assert payload["validation"]["issue_count"] > 0
     assert payload["records"][0]["平台"] == "去哪儿网"
+    assert "_邮件正文" not in payload["records"][0]
+    assert "不得写入结果的临时证据" not in path.read_text(encoding="utf-8")
+    assert payload["agent_task"]["status"] == "needs_user_input"
     assert payload["trips"][0]["destination"] == "深圳"
 
     loaded = load_results_json(path)

@@ -104,3 +104,99 @@ def test_validation_marks_complete_records_ready():
     assert validation["can_submit"] is True
     assert validation["complete_count"] == 1
     assert validation["issue_count"] == 0
+
+
+def test_validation_blocks_invalid_financial_and_document_values():
+    records = [
+        {
+            "分类": "发票",
+            "供应商": "测试商店",
+            "金额": float("inf"),
+            "日期": "2026-02-30",
+            "附件": "../invoice.exe",
+        }
+    ]
+
+    validation = validate_reimbursement(records, [])
+    codes = {issue["code"] for issue in validation["records"][0]["issues"]}
+
+    assert validation["can_submit"] is False
+    assert {"invalid_amount", "invalid_date", "invalid_attachment"}.issubset(codes)
+
+
+def test_validation_blocks_trip_total_dates_and_multiple_assignment():
+    record = {
+        "记录ID": "R0001",
+        "分类": "机票",
+        "平台": "去哪儿网",
+        "金额": 100.0,
+        "日期": "2026-08-05",
+        "附件": "flight.pdf",
+    }
+    trips = [
+        {
+            "trip_id": 1,
+            "start_date": "2026-08-03",
+            "end_date": "2026-08-01",
+            "records": [record],
+            "total": 99.0,
+        },
+        {
+            "trip_id": 2,
+            "start_date": "2026-08-01",
+            "end_date": "2026-08-02",
+            "records": [record],
+            "total": 100.0,
+        },
+    ]
+
+    validation = validate_reimbursement([record], trips)
+    codes = {issue["code"] for issue in validation["records"][0]["issues"]}
+
+    assert "multiple_trips" in codes
+    assert "invalid_trip_dates" in codes
+    assert "trip_total_mismatch" in codes
+    assert "date_outside_trip" in codes
+
+
+def test_validation_checks_physical_attachment_when_directory_is_provided(tmp_path):
+    record = {
+        "分类": "发票",
+        "供应商": "测试商店",
+        "金额": 20.0,
+        "日期": "2026-08-01",
+        "附件": "invoice.pdf",
+    }
+
+    missing = validate_reimbursement([record], [], attachment_dir=tmp_path)
+    assert "unreadable_attachment" in {
+        issue["code"] for issue in missing["records"][0]["issues"]
+    }
+
+    (tmp_path / "invoice.pdf").write_bytes(b"%PDF-1.7 content")
+    readable = validate_reimbursement([record], [], attachment_dir=tmp_path)
+    assert "unreadable_attachment" not in {
+        issue["code"] for issue in readable["records"][0]["issues"]
+    }
+
+
+def test_review_uses_same_physical_attachment_check(tmp_path):
+    record = {
+        "分类": "发票",
+        "供应商": "测试商店",
+        "金额": 20.0,
+        "日期": "2026-08-01",
+        "附件": "missing.pdf",
+    }
+
+    review_path = generate_review_html(
+        [record],
+        [],
+        tmp_path,
+        "测试范围",
+        attachment_dir=tmp_path / "附件",
+    )
+
+    page = review_path.read_text(encoding="utf-8")
+    assert "暂不建议提交" in page
+    assert "原件不存在、为空或无法读取" in page

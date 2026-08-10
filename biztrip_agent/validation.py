@@ -1,13 +1,17 @@
 """Validate whether generated reimbursement records are ready to submit."""
 
 from collections import defaultdict
+from datetime import datetime
+import math
+from pathlib import Path
 
 
 TRIP_CATEGORIES = {"机票", "火车票", "酒店", "网约车", "门票"}
 IDENTIFIER_FIELDS = ("订单号", "发票号码", "发票号")
+SUPPORTED_ATTACHMENT_SUFFIXES = {".pdf", ".zip", ".jpg", ".jpeg", ".png", ".heic"}
 
 
-def validate_reimbursement(records, trips):
+def validate_reimbursement(records, trips, attachment_dir=None):
     """Return a deterministic submission assessment for records and trips."""
     results = [
         {"index": index, "status": "complete", "issues": []}
@@ -15,19 +19,26 @@ def validate_reimbursement(records, trips):
     ]
 
     for index, record in enumerate(records):
-        if not _has_amount(record):
+        if record.get("金额") in (None, ""):
             _add_issue(results[index], "missing_amount", "待补金额")
+        elif not _valid_amount(record.get("金额")):
+            _add_issue(results[index], "invalid_amount", "金额格式无效")
         if not _text(record.get("日期")):
             _add_issue(results[index], "missing_date", "待补日期")
+        elif _parse_date(record.get("日期")) is None:
+            _add_issue(results[index], "invalid_date", "日期格式或日期值无效")
         if not _vendor(record):
             _add_issue(results[index], "missing_vendor", "待补供应商")
         if not _text(record.get("附件")):
             _add_issue(results[index], "missing_attachment", "待补原件")
+        else:
+            _validate_attachment_names(record, results[index], attachment_dir=attachment_dir)
         if record.get("分类") in TRIP_CATEGORIES and not _belongs_to_trip(record, trips):
             _add_issue(results[index], "unassigned_trip", "待确认行程归属")
 
     _flag_identifier_collisions(records, results)
     _flag_reused_attachments(records, results)
+    _validate_trip_integrity(records, trips, results)
 
     for result in results:
         if result["issues"]:
@@ -121,6 +132,124 @@ def _has_amount(record):
         return float(amount) > 0
     except (TypeError, ValueError):
         return False
+
+
+def _valid_amount(value):
+    try:
+        amount = float(value)
+    except (TypeError, ValueError):
+        return False
+    return math.isfinite(amount) and amount > 0 and round(amount, 2) == amount
+
+
+def _parse_date(value):
+    text = _text(value)
+    for format_string in ("%Y-%m-%d", "%Y年%m月%d日"):
+        try:
+            return datetime.strptime(text, format_string).date()
+        except ValueError:
+            continue
+    return None
+
+
+def _validate_attachment_names(record, result, attachment_dir=None):
+    for raw_name in str(record.get("附件") or "").split(";"):
+        name = raw_name.strip()
+        if not name:
+            continue
+        path = Path(name)
+        if path.name != name or path.suffix.lower() not in SUPPORTED_ATTACHMENT_SUFFIXES:
+            _add_issue(result, "invalid_attachment", f"原件名称或格式无效（{name}）")
+            continue
+        if attachment_dir is not None:
+            full_path = Path(attachment_dir) / name
+            if not _readable_attachment(full_path, path.suffix.lower()):
+                _add_issue(result, "unreadable_attachment", f"原件不存在、为空或无法读取（{name}）")
+
+
+def _readable_attachment(path, suffix):
+    try:
+        data = path.read_bytes()[:64]
+    except OSError:
+        return False
+    if not data:
+        return False
+    checks = {
+        ".pdf": data.lstrip().startswith(b"%PDF"),
+        ".zip": data.startswith(b"PK\x03\x04") or data.startswith(b"PK\x05\x06"),
+        ".jpg": data.startswith(b"\xff\xd8\xff"),
+        ".jpeg": data.startswith(b"\xff\xd8\xff"),
+        ".png": data.startswith(b"\x89PNG\r\n\x1a\n"),
+        ".heic": b"ftyp" in data[:32],
+    }
+    return checks.get(suffix, False)
+
+
+def _validate_trip_integrity(records, trips, results):
+    memberships = defaultdict(list)
+    for trip in trips:
+        for trip_record in trip.get("records") or []:
+            index = _record_index(records, trip_record)
+            if index is not None:
+                memberships[index].append(trip)
+
+    for index, assigned_trips in memberships.items():
+        if len(assigned_trips) > 1:
+            _add_issue(results[index], "multiple_trips", "同一费用被分配到多个行程")
+
+    for trip in trips:
+        trip_records = trip.get("records") or []
+        if not trip_records:
+            continue
+        first_index = _record_index(records, trip_records[0])
+        start_text = _text(trip.get("start_date"))
+        end_text = _text(trip.get("end_date"))
+        start_date = _parse_date(start_text) if start_text else None
+        end_date = _parse_date(end_text) if end_text else None
+        if (start_text and start_date is None) or (end_text and end_date is None):
+            if first_index is not None:
+                _add_issue(results[first_index], "invalid_trip_dates", "行程起止日期无效")
+        elif start_date and end_date and start_date > end_date:
+            if first_index is not None:
+                _add_issue(results[first_index], "invalid_trip_dates", "行程开始日期晚于结束日期")
+
+        if "total" in trip:
+            expected_total = sum(_safe_amount(record.get("金额")) for record in trip_records)
+            try:
+                actual_total = float(trip.get("total"))
+            except (TypeError, ValueError):
+                actual_total = None
+            if actual_total is None or not math.isfinite(actual_total) or abs(actual_total - expected_total) > 0.01:
+                if first_index is not None:
+                    _add_issue(results[first_index], "trip_total_mismatch", "行程合计与明细金额不一致")
+
+        if not (start_date and end_date):
+            continue
+        for trip_record in trip_records:
+            index = _record_index(records, trip_record)
+            record_date = _parse_date(trip_record.get("日期"))
+            if index is not None and record_date and not (start_date <= record_date <= end_date):
+                _add_issue(results[index], "date_outside_trip", "费用日期不在所属行程范围内")
+
+
+def _record_index(records, target):
+    target_id = _text(target.get("记录ID"))
+    for index, record in enumerate(records):
+        record_id = _text(record.get("记录ID"))
+        if target_id and record_id:
+            if target_id == record_id:
+                return index
+        elif target is record or target == record:
+            return index
+    return None
+
+
+def _safe_amount(value):
+    try:
+        amount = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    return amount if math.isfinite(amount) else 0.0
 
 
 def _vendor(record):

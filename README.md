@@ -206,15 +206,9 @@ pytest
 
 ```
 output/
-├── 差旅汇总_20260705_143022.xlsx    ← 三 Sheet Excel 报表
-├── review_20260705_143022.html      ← 提交前完整性检查
-├── records_20260705_143022.json      ← 系统留档（用于复查/再生成）
-└── 附件/                        ← 原始 PDF/ZIP 原件
-    ├── 机票/
-    ├── 火车票/
-    ├── 酒店/
-    ├── 网约车/
-    └── 发票/
+└── 报销包_20260705_143022/
+    ├── 差旅汇总_20260705_143022.xlsx  ← 三 Sheet Excel 报表
+    └── 原件/                           ← 本次实际引用的凭证
 ```
 
 ### Excel 报表结构
@@ -225,14 +219,14 @@ output/
 | **费用明细** | 所有记录按日期排序，最高金额红色高亮，标注提取方法 |
 | **按供应商** | 各平台消费排名，隔行配色 |
 
-`records_YYYYMMDD_HHMMSS.json` 是系统留档，普通使用只需要打开 Excel 和审阅页。文件名带生成时间，同一天重复扫描不会覆盖旧结果。
+只有全部材料通过质量核验后，系统才会生成报销包。Agent 状态和附件缓存保存在内部目录，不作为用户交付物；同一天重复生成不会覆盖旧报销包。
 
-审阅页会先给出“可以提交”或“暂不建议提交”的结论。缺金额、缺日期、缺供应商、缺原件、未归入行程、疑似重复或同一单号数据冲突的记录会集中列出。系统仍会保留 Excel 和原件，方便用户核对和补充，不会自动删除结果。
+Web 页面会给出“可以提交”或“暂不建议提交”的结论。缺金额、缺日期、缺供应商、缺原件、未归入行程、疑似重复或同一单号数据冲突的记录会集中处理；问题未解决前不会提前生成一个看似可提交的 Excel。
 
-从 JSON 重新生成报表：
+维护人员需要恢复历史任务时，可以从内部状态重新生成：
 
 ```bash
-biztrip rebuild output/records_20260705_143022.json --review
+biztrip rebuild output/.biztrip/records_20260705_143022.json --review
 ```
 
 ---
@@ -276,17 +270,15 @@ LLM_MODEL=qwen2.5:7b
 
 ---
 
-## 🧩 Agent Skills（多平台支持）
+## 🧩 Agent Skill
 
-项目内置 5 个 AI Agent Skill，不绑定任何特定 IDE。`skills/` 目录下的 `.md` 文件是通用格式，**Claude Code、Cursor、GitHub Copilot、Windsurf、TRAE IDE** 等均可使用。
+项目提供一个开源薄 Skill：[`biztrip-reimbursement`](skills/biztrip-reimbursement/SKILL.md)。安装到支持 Skill 的 Agent 后，可以直接说：
 
-| Skill | 功能 | 依赖 |
-|-------|------|------|
-| **fetch-emails** | IMAP 连接邮箱，获取邮件列表 | `python-dotenv` |
-| **classify-emails** | 域名+关键词双规则分类差旅邮件 | `python-dotenv` |
-| **extract-emails** | 多平台解析器，提取结构化信息 | `python-dotenv PyPDF2` |
-| **generate-report** | 全链路 → 三 Sheet Excel + 附件归档 | `python-dotenv PyPDF2 openpyxl` |
-| **agent-report** | LLM 增强版：智能分类+提取+出差聚合 | 以上全部 + `openai` |
+> 帮我整理 7 月的差旅报销。
+
+Skill 只负责理解时间范围、调用本地引擎、询问待确认信息和交付结果。邮箱读取、附件解析、金额核验和报销包生成仍由本地确定性引擎完成；Skill 不读取或展示邮箱授权码和 API Key。
+
+旧版分步骤 Skill 暂时保留用于兼容，不建议新用户使用。
 
 > 详细使用说明见 [Agent Skills 文档](docs/skills.md)
 
@@ -306,7 +298,7 @@ BizTrip-Agent/
 │   ├── llm_extract.py       LLM 专用提取 + 正则降级
 │   ├── llm_aggregate.py     LLM 出差聚合 + 规则兜底
 │   └── agent_report.py      Agent 主入口
-├── skills/             ← 通用 Agent Skill（.md 格式）
+├── skills/             ← 开源薄 Skill + 旧版兼容说明
 ├── .trae/skills/       ← TRAE IDE 专用 Skill
 ├── docs/               ← 使用文档
 ├── wiki/               ← 知识库（产品/架构/决策/规格）
