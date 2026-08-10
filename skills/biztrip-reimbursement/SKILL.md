@@ -60,7 +60,7 @@ biztrip agent start --count 60
 
 Parse stdout as one JSON object. Follow `status` and `next_action`; do not infer success from process text.
 
-If starting the task returns `setup_required` or `task_not_created`, launch the returned engine command with `web`. Tell the user to finish mailbox setup in that local page. Do not collect the mailbox address, authorization code, or LLM key in chat. After the user confirms setup is complete, retry the task once.
+If starting the task returns `setup_required` or `task_not_created`, launch the returned engine command with `web`. Tell the user to finish mailbox setup and configure their own OpenAI-compatible model Base URL, API Key, and model name in that local page. Do not collect the mailbox address, authorization code, model URL, or API Key in chat. After the user confirms setup is complete, retry the task once.
 
 ## Continue a Task
 

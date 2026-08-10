@@ -23,7 +23,7 @@ jobs:
           cache: pip
 
       - name: Install application and packager
-        run: python -m pip install -e ".[llm,test]" pyinstaller
+        run: python -m pip install -e ".[test]" pyinstaller
 
       - name: Run tests
         run: python -m pytest

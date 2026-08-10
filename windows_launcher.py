@@ -14,7 +14,7 @@ DEFAULT_PORT = 8765
 
 def app_data_dir(environ=None):
     """Return the persistent private directory for config and logs."""
-    environ = environ or os.environ
+    environ = os.environ if environ is None else environ
     override = environ.get("BIZTRIP_DATA_DIR", "").strip()
     if override:
         return Path(override).expanduser()
@@ -26,7 +26,7 @@ def app_data_dir(environ=None):
 
 def reports_dir(environ=None):
     """Return the user-visible directory for generated reimbursement files."""
-    environ = environ or os.environ
+    environ = os.environ if environ is None else environ
     override = environ.get("BIZTRIP_OUTPUT_DIR", "").strip()
     if override:
         return Path(override).expanduser()
@@ -44,7 +44,7 @@ def resource_path(name):
 
 def prepare_runtime(environ=None):
     """Create persistent directories and configure the application runtime."""
-    environ = environ or os.environ
+    environ = os.environ if environ is None else environ
     data_dir = app_data_dir(environ)
     output_dir = reports_dir(environ)
     data_dir.mkdir(parents=True, exist_ok=True)
@@ -73,6 +73,18 @@ def available_port(preferred=DEFAULT_PORT):
         return probe.getsockname()[1]
 
 
+def configured_port(environ=None):
+    """Use an explicit deployment port, or automatically find one."""
+    environ = os.environ if environ is None else environ
+    value = environ.get("BIZTRIP_PORT", "").strip()
+    if not value:
+        return available_port()
+    port = int(value)
+    if not 1 <= port <= 65535:
+        raise ValueError("BIZTRIP_PORT must be between 1 and 65535")
+    return port
+
+
 def show_error(message):
     """Display launch failures even though the packaged app has no console."""
     try:
@@ -90,10 +102,11 @@ def main():
         with log_path.open("a", encoding="utf-8") as log:
             sys.stdout = log
             sys.stderr = log
-            port = available_port()
+            port = configured_port()
             from biztrip_agent.web import run_server
 
-            return run_server(host="127.0.0.1", port=port, open_browser=True)
+            open_browser = os.getenv("BIZTRIP_NO_OPEN_BROWSER") != "1"
+            return run_server(host="127.0.0.1", port=port, open_browser=open_browser)
     except Exception:
         details = traceback.format_exc()
         try:

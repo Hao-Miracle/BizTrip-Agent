@@ -45,7 +45,7 @@ def main(argv=None):
     scan_parser.add_argument("--start", help="Start date in YYYY-MM-DD format.")
     scan_parser.add_argument("--end", help="End date in YYYY-MM-DD format.")
     scan_parser.add_argument("--count", type=int, default=60, help="Number of recent emails to scan when no date range is set.")
-    scan_parser.add_argument("--no-llm", action="store_true", help="Force rule mode even when LLM config is present.")
+    scan_parser.add_argument("--no-llm", action="store_true", help=argparse.SUPPRESS)
     scan_parser.add_argument("--review", action="store_true", help="Also generate a local HTML review page.")
     scan_parser.add_argument(
         "--output-dir",
@@ -65,7 +65,7 @@ def main(argv=None):
     agent_start.add_argument("--start", help="Start date in YYYY-MM-DD format.")
     agent_start.add_argument("--end", help="End date in YYYY-MM-DD format.")
     agent_start.add_argument("--count", type=int, default=60)
-    agent_start.add_argument("--no-llm", action="store_true")
+    agent_start.add_argument("--no-llm", action="store_true", help=argparse.SUPPRESS)
     agent_start.add_argument("--output-dir", default=str(OUTPUT_DIR))
     agent_status = agent_commands.add_parser("status", help="Return the latest task as JSON.")
     agent_status.add_argument("--task", help="Specific records JSON path.")
@@ -288,7 +288,7 @@ def check():
         ("dotenv", "python-dotenv", True),
         ("PyPDF2", "PyPDF2", True),
         ("openpyxl", "openpyxl", True),
-        ("openai", "openai", False),
+        ("openai", "openai", True),
     ]:
         available = importlib.util.find_spec(module_name) is not None
         status = "OK" if available else ("MISSING" if required else "OPTIONAL")

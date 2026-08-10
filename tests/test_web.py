@@ -51,12 +51,12 @@ def test_web_home_contains_local_workflows(monkeypatch, tmp_path):
     assert "报销结束日期" in html
     assert "高级扫描选项" in html
     assert "维护工具" in html
-    assert "LLM 增强配置" in html
+    assert "Agent 模型" in html
     assert "接口地址" in html
     assert "API Key" in html
     assert "模型名称" in html
-    assert "点击开始生成时自动调用" in html
-    assert "没有单独对话窗口" in html
+    assert "低成本模型" in html
+    assert "云端模型会接收必要的邮件和票据文本" in html
     assert "提供商" not in html
     assert "准备状态" in html
     assert "诊断信息" in html
@@ -78,7 +78,7 @@ def test_shutdown_page_explains_how_to_restart():
     html = _shutdown_html()
 
     assert "已安全停止" in html
-    assert "BizTrip-Agent-Windows.exe" in html
+    assert "重新打开 BizTrip Agent" in html
 
 
 def test_web_env_path_can_use_temporary_first_run_config(monkeypatch, tmp_path):
@@ -252,7 +252,7 @@ def test_account_form_saves_config_and_infers_imap(monkeypatch, tmp_path):
     )
 
     values = _read_env_values(env_path)
-    assert "账号已保存" in html
+    assert "邮箱已保存" in html
     assert values["EMAIL_ACCOUNT"] == "user@qq.com"
     assert values["EMAIL_PASSWORD"] == "mail-token"
     assert values["EMAIL_IMAP_SERVER"] == "imap.qq.com"
@@ -278,6 +278,20 @@ def test_scan_preflight_requires_email_config(monkeypatch, tmp_path):
     monkeypatch.setattr("biztrip_agent.web._env_path", lambda: tmp_path / ".env")
 
     assert _preflight_scan(tmp_path) == "请先在 .env 中填写 EMAIL_ACCOUNT。"
+
+
+def test_scan_preflight_requires_agent_model_config(monkeypatch, tmp_path):
+    env_path = tmp_path / ".env"
+    env_path.write_text("EMAIL_ACCOUNT=user@qq.com\nEMAIL_PASSWORD=mail-token\n", encoding="utf-8")
+    monkeypatch.setattr("biztrip_agent.web._env_path", lambda: env_path)
+
+    assert _preflight_scan(tmp_path) == "请先配置 Agent 模型 API Key。"
+
+    env_path.write_text(
+        "EMAIL_ACCOUNT=user@qq.com\nEMAIL_PASSWORD=mail-token\nLLM_API_KEY=sk-test\n",
+        encoding="utf-8",
+    )
+    assert _preflight_scan(tmp_path) == "请先配置 Agent 模型接口地址。"
 
 
 def test_background_job_records_failure():

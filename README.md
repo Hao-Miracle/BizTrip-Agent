@@ -10,12 +10,14 @@
 
 BizTrip 会在本地收集凭证、识别费用、归并出差行程；发现缺失或冲突时先向你确认，全部通过后才交付 Excel 和报销原件。
 
+**先用 Skill 验证效果，再安装本地测试版长期使用。使用自己的模型接口，成本透明，不为模型调用支付平台加价。**
+
 <p>
   <a href="skills/biztrip-reimbursement/SKILL.md"><strong>安装开源 Skill</strong></a>
   ·
-  <a href="#没有-agent也能使用">没有 Agent 也能使用</a>
+  <a href="#效果满意后安装本地测试版">下载本地测试版</a>
   ·
-  <a href="docs/usage.md">查看使用文档</a>
+  <a href="https://github.com/Hao-Miracle/BizTrip-Agent/issues/new?template=professional_inquiry.yml">申请专业版</a>
 </p>
 
 <p>
@@ -33,7 +35,7 @@ BizTrip 会在本地收集凭证、识别费用、归并出差行程；发现缺
 
 ---
 
-## 从一句话开始
+## 第一步：先用 Skill 尝试
 
 BizTrip 的首选入口是开源薄 Skill：[`biztrip-reimbursement`](skills/biztrip-reimbursement/SKILL.md)。它把 BizTrip 接入你正在使用的 Agent，而不是要求你学习新的报销软件。
 
@@ -54,11 +56,16 @@ Skill 会：
 1. 理解你要处理的时间范围。
 2. 检测电脑上是否已有 BizTrip 本地引擎。
 3. 未安装时先说明用途，获得同意后再安装免费开源引擎。
-4. 引擎完成扫描、提取、行程归并和提交前核验。
-5. 遇到缺失、重复或冲突时，只询问必须由你确认的问题。
-6. 核验通过后交付报销包位置和总金额。
+4. 引导你填写自己的模型接口地址、API Key 和模型名称。
+5. 引擎完成扫描、提取、行程归并和提交前核验。
+6. 遇到缺失、重复或冲突时，只询问必须由你确认的问题。
+7. 核验通过后交付报销包位置和总金额。
 
 Skill 不读取或展示邮箱授权码、API Key，也不会把核心识别逻辑交给不同 Agent 随意执行。详细边界见 [Agent Skill 使用指南](docs/skills.md)。
+
+这一步不是让用户先学习部署，而是用一份真实报销任务验证三件事：识别是否省时、待确认问题是否可信、最终报销包是否能直接使用。
+
+效率来自闭环而不是更多操作：用户只说明时间范围，Agent 完成邮件筛选、附件解析、费用归类、行程聚合和报销包交付；只有证据不足时才会打断用户。
 
 ---
 
@@ -101,21 +108,23 @@ Excel 包含：
 
 ---
 
-## 本地处理，凭证不离开电脑
+## 本地优先，数据去向由用户决定
 
 - 邮箱通过标准 IMAP 读取，不发送、不删除、不修改邮件。
-- 邮箱授权码和可选 LLM API Key 只保存在用户本机。
+- 邮箱授权码和模型 API Key 只保存在用户本机。
 - PDF、ZIP、Excel 和任务状态均保存在本地目录。
 - Skill 不接收秘密配置，不替用户猜测财务数据。
-- 不配置 LLM 也能使用规则引擎；配置后只增强复杂邮件识别。
+- 模型负责理解邮件，规则引擎负责证据核验和故障兜底。
+
+使用云端模型时，邮件正文片段和用于核验的票据文本会发送到用户自己配置的模型服务；原始附件和报销包仍保存在本地。需要数据完全不出本机时，应配置兼容 OpenAI 协议的本地模型。
 
 支持 QQ、163、126、Gmail、Outlook 及其他标准 IMAP 邮箱。已覆盖 12306、去哪儿、携程、飞猪、航司邮件、酒店、滴滴、高德聚合打车、智慧发票、票根等常见来源。
 
 ---
 
-## 没有 Agent 也能使用
+## 效果满意后，安装本地测试版
 
-Skill 是首选获客和使用入口，但本地引擎本身可以独立运行。
+Skill 用于低门槛体验和获客。本地测试版用于持续使用：配置只做一次，之后每次选择报销时间即可。Windows 和 macOS 使用同一套 Agent、核验规则和输出格式。
 
 ### Windows
 
@@ -123,17 +132,15 @@ Skill 是首选获客和使用入口，但本地引擎本身可以独立运行�
 
 查看 [Windows 测试版说明](docs/windows-one-click.md)。Windows SmartScreen 可能要求用户确认运行。
 
-### macOS 和 Linux
+### macOS
 
-正式 macOS 桌面安装包尚未发布。当前可以通过源码启动本地 Web 工作台：
+当前提供未签名、未公证的 macOS 测试版。下载并解压后打开 `BizTrip-Agent-Mac.app`，无需安装 Python 或 Git。
 
-```bash
-git clone https://github.com/Hao-Miracle/BizTrip-Agent.git && cd BizTrip-Agent && python3 start.py
-```
+查看 [macOS 测试版说明](docs/macos-test.md)。首次运行需要在 Finder 中按住 Control 点击应用并确认打开。
 
-这条命令会创建隔离运行环境并安装依赖，不会替用户安装 Python、开启邮箱 IMAP 或生成邮箱授权码。完整说明见 [安装指南](docs/installation.md)。
+### Linux 和开发者
 
-后续会提供与 Windows 对等的正式桌面分发；在签名、公证和自动更新完成前，不把未经验证的 macOS 安装包包装成“一键正式版”。
+可以通过源码启动本地 Web 工作台，完整步骤见 [安装指南](docs/installation.md)。
 
 ---
 
@@ -150,21 +157,21 @@ git clone https://github.com/Hao-Miracle/BizTrip-Agent.git && cd BizTrip-Agent &
 
 ---
 
-## 可选 LLM 增强
+## 低成本来自用户自备模型接口
 
-基础版不要求 LLM API Key。规则引擎可以完成邮箱分类、字段提取、附件处理、核验和报销包生成。
+BizTrip 的所有版本都包含 Agent 能力。用户自己选择兼容 OpenAI 协议的模型服务，填写接口地址、API Key 和模型名称，不需要购买 BizTrip 的模型额度，也不承担中间平台加价。
 
-复杂邮件需要增强识别时，可以在本地 Web 页面填写兼容 OpenAI 协议的接口地址、API Key 和模型名称。LLM 失败或证据不足时，系统会回退到规则与确定性校验，不会因为模型输出而绕过提交门槛。
+模型负责理解复杂邮件和判断行程；本地规则负责提取兜底、证据核验、金额计算和提交门槛。模型失败或证据不足时，系统不会把未经核验的结果交付给用户。
 
-支持用户自备的云端模型或本地模型，配置示例见 [.env.example](.env.example)。
+这种组合把模型调用集中在真正需要理解的环节，避免重复调用和重复解析附件。实际费用由用户选择的模型、邮件数量和服务商定价决定。配置示例见 [.env.example](.env.example)。
 
 ---
 
-## 免费边界与未来方向
+## 第三步：需要团队能力时升级
 
 当前仓库提供免费的开源 Skill 和单人本地引擎，目标是让个人用户低成本完成第一份可信的报销包。
 
-未来的专业和团队能力将聚焦于持续服务，而不是把基础 Excel 导出重新收费：
+专业版和企业版不会为基础 Excel 导出重复收费，而是解决个人本地版无法覆盖的组织问题：
 
 - 企业报销制度和合规规则核验。
 - 发票验真、异常检测和跨员工查重。
@@ -172,7 +179,7 @@ git clone https://github.com/Hao-Miracle/BizTrip-Agent.git && cd BizTrip-Agent &
 - OA、ERP、财务系统及企业模板连接。
 - 托管模型调用、自动更新、私有部署和技术支持。
 
-这些能力仍在规划中，当前开源版本不宣称已经提供。
+这些能力正在接受付费需求和联合验证，当前开源版本不宣称已经提供。需要付费部署、企业规则接入、私有化或团队工作流，可以提交 [专业版申请](https://github.com/Hao-Miracle/BizTrip-Agent/issues/new?template=professional_inquiry.yml)。请勿在公开表单中填写员工信息、发票内容、邮箱授权码或 API Key。
 
 ---
 
@@ -182,7 +189,7 @@ git clone https://github.com/Hao-Miracle/BizTrip-Agent.git && cd BizTrip-Agent &
 
 ```bash
 python3 -m venv .venv
-.venv/bin/python -m pip install -e ".[llm,test]"
+.venv/bin/python -m pip install -e ".[test]"
 ```
 
 常用命令：
@@ -204,8 +211,8 @@ BizTrip-Agent/
 ├── biztrip_agent/      本地任务、核验、交付、Web 和 Agent 接口
 ├── common/             邮件与通用解析能力
 ├── phase1/             规则解析流程
-├── phase2/             可选 LLM 增强流程
-├── skills/             开源薄 Skill 和兼容文件
+├── phase2/             Agent 模型理解与行程聚合
+├── skills/             开源薄 Skill
 ├── tests/              本地与跨平台自动测试
 └── docs/               安装、使用和常见问题
 ```
@@ -222,9 +229,9 @@ BizTrip-Agent/
 
 ## 常见问题
 
-**必须配置 LLM API Key 吗？**
+**必须配置模型接口和 API Key 吗？**
 
-不需要。LLM 是可选增强，不配置仍可使用规则模式。
+需要。没有模型调用时只能运行确定性程序，不构成完整 Agent。所有测试版已经包含模型客户端，用户只需配置自己的接口地址、API Key 和模型名称。
 
 **会修改邮箱里的邮件吗？**
 
@@ -234,9 +241,9 @@ BizTrip-Agent/
 
 因为一份错误但看似完整的报销表比没有结果更危险。需要确认的问题解决后才生成报销包。
 
-**macOS 为什么暂时没有安装包？**
+**Windows 和 macOS 测试版需要另外购买模型额度吗？**
 
-当前优先通过 Skill 和本地启动器验证产品闭环。正式 macOS 分发需要完成签名、公证和更新机制后再发布。
+BizTrip 不销售或加价转售模型额度。测试用户使用自己选择的模型服务商，费用直接由服务商收取。
 
 更多问题见 [FAQ](docs/faq.md)。
 

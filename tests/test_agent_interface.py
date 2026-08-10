@@ -105,7 +105,7 @@ def test_agent_start_routes_first_time_user_to_local_setup(capsys, monkeypatch):
 
     assert exit_code == 1
     assert payload["error"]["code"] == "setup_required"
-    assert "授权码" in payload["error"]["message"]
+    assert "Agent 模型" in payload["error"]["message"]
 
 
 def test_cli_agent_answer_reads_structured_file(tmp_path, capsys):
