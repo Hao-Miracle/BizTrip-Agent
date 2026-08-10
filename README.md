@@ -35,17 +35,40 @@ BizTrip 会在本地收集凭证、识别费用、归并出差行程；发现缺
 
 ---
 
-## 实际效果
+## 两种使用方式，两种明确结果
 
 以下截图由项目自带的虚构 Demo 数据生成，不包含真实邮箱、员工或票据信息。
 
-### 核验后的报销结果
+### 1. 在自己的 Agent 中使用 Skill：先做报销体检
 
-![BizTrip Agent 报销审阅报告](docs/assets/review-demo.png)
+用户只需要说明时间范围。Skill 会给出候选费用、预计金额、分类和需要关注的问题，不下载原始附件，也不生成 Excel。
 
-### 本地工作台
+[![BizTrip Skill 报销体检效果](docs/assets/skill-audit-demo.png)](docs/assets/skill-audit-demo.png)
 
-![BizTrip Agent 本地工作台](docs/assets/workbench-demo.png)
+这一步用于快速判断材料是否值得继续整理。确认效果后，再进入本地个人版完成原始票据解析和正式交付。
+
+### 2. 使用本地个人版：生成完整报销包
+
+本地个人版提供独立工作台，用户选择报销时间后，系统解析邮件与原始附件、解决缺失和冲突，并完成提交前核验。
+
+[![BizTrip Agent 本地个人版完整效果](docs/assets/local-personal-demo.png)](docs/assets/local-personal-demo.png)
+
+核验完成后会明确显示“可以提交”或“暂不建议提交”，并生成 Excel 和本次真正引用的原件目录。
+
+<details>
+<summary>查看本地工作台和审阅报告完整长图</summary>
+
+#### 本地工作台
+
+[![BizTrip Agent 本地工作台](docs/assets/workbench-demo.png)](docs/assets/workbench-demo.png)
+
+#### 报销审阅报告
+
+[![BizTrip Agent 报销审阅报告](docs/assets/review-demo.png)](docs/assets/review-demo.png)
+
+</details>
+
+> 点击图片可以查看完整大图。Skill 展示的是体检结果；本地个人版展示的是完整处理与交付结果。
 
 ---
 
