@@ -809,7 +809,7 @@ def _latest_files(output_dir):
     output_dir = Path(output_dir)
     if not output_dir.exists():
         return []
-    names = ["*.xlsx", "review_*.html"]
+    names = ["报销包_*/*.xlsx"]
     files = []
     for pattern in names:
         files.extend(output_dir.glob(pattern))
@@ -985,7 +985,7 @@ def _run_resolve(form):
         return render_home(error=str(exc))
     return render_home(
         message="已采用你的确认并重新核验。",
-        files=[result["xlsx_path"], result["review_path"]],
+        files=[path for path in [result["xlsx_path"]] if path],
         result_summary=_result_summary(latest.parent),
     )
 
@@ -1064,6 +1064,7 @@ def _latest_records_json(output_dir=None):
     for root in roots:
         if root.exists():
             files.extend(root.glob("records_*.json"))
+            files.extend((root / ".biztrip").glob("records_*.json"))
     if not files:
         return None
     return max(files, key=lambda path: path.stat().st_mtime)
@@ -1279,7 +1280,6 @@ def _scan_html(configured):
         </div>
         <input name="count" type="hidden" value="60">
         <input name="output_dir" type="hidden" value="{output_dir}">
-        <input name="review" type="hidden" value="on">
         <button type="submit"{disabled}>开始生成</button>
       </form>
       <details>

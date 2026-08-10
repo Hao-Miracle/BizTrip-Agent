@@ -209,7 +209,8 @@ def enrich_record(record, subject, sender, attachments, evidence_text=""):
 
 def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, interactive=True, review=False):
     output_dir = os.path.abspath(output_dir)
-    attach_dir = os.path.join(output_dir, '附件')
+    state_dir = os.path.join(output_dir, '.biztrip')
+    attach_dir = os.path.join(state_dir, '附件')
     os.makedirs(attach_dir, exist_ok=True)
 
     email_addr, auth_code, imap_server, imap_port = get_email_config()
@@ -275,8 +276,6 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
         sender = decode_str(msg['From'])
         subject = decode_str(msg['Subject'])
         body = get_email_text(msg)
-        attachments = save_attachments(msg, idx, attach_dir=attach_dir)
-
         # 分类（LLM 或规则）
         classify_result = classify_email(subject, sender, body[:500], use_llm=use_llm)
 
@@ -284,6 +283,8 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
         method = classify_result.get('method', '规则')
         if category == '不相关':
             continue
+
+        attachments = save_attachments(msg, idx, attach_dir=attach_dir)
 
         # 提取（LLM 或规则）
         extract_result = extract_record(body, subject, category, use_llm=use_llm)
@@ -347,7 +348,7 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
     trips, initial_validation, recovery_actions = run_recovery_loop(
         records,
         trips,
-        attachment_recoverer=lambda items: enrich_records_from_attachments(items, output_dir=output_dir),
+        attachment_recoverer=lambda items: enrich_records_from_attachments(items, output_dir=state_dir),
         vendor_resolver=infer_vendor,
         trip_builder=lambda items: aggregate_trips(items, use_llm=use_llm),
         evidence_resolver=evidence_resolver,
@@ -368,16 +369,30 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
     for record in records:
         record.pop('_邮件正文', None)
 
-    # ===== Step 6: 生成 Excel =====
+    # ===== Step 6: 只在核验通过后生成最小报销包 =====
     total_amount = sum(r.get('金额', 0) or 0 for r in records)
-    xlsx_path = _generate_excel(records, trips, total_amount, scan_label, output_dir=output_dir, use_llm=use_llm)
+    xlsx_path = None
+    package_dir = None
+    if agent_task['status'] == 'completed':
+        from biztrip_agent.delivery import create_delivery_package
+
+        package = create_delivery_package(
+            records,
+            trips,
+            output_dir,
+            attach_dir,
+            scan_label,
+            use_llm,
+        )
+        xlsx_path = package['excel_path']
+        package_dir = package['package_dir']
     review_path = None
     if review:
         from biztrip_agent.review import generate_review_html
         review_path = generate_review_html(
             records,
             trips,
-            output_dir,
+            state_dir,
             scan_label,
             excel_path=xlsx_path,
             attachment_dir=attach_dir,
@@ -386,7 +401,7 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
     results_path = write_results_json(
         records,
         trips,
-        output_dir,
+        state_dir,
         scan_label,
         xlsx_path=xlsx_path,
         review_path=review_path,
@@ -402,9 +417,10 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
         print(f'  🧠 LLM 提取: {llm_count} 条  📋 规则降级: {rule_count} 条')
     print(f'  ✈️  识别到 {len(trips)} 次出差/旅行')
     print(f'  💰 总金额: ¥{total_amount:,.2f}')
-    print(f'  📊 Excel: {xlsx_path}')
-    print(f'  🧾 JSON: {results_path}')
-    print(f'  📎 附件: {attach_dir}/')
+    if package_dir:
+        print(f'  📦 报销包: {package_dir}')
+    else:
+        print('  ⚠️ 仍有问题待确认，暂未生成报销包')
 
     if trips:
         print(f'\n📋 出差行程汇总:')
@@ -416,6 +432,7 @@ def main(start=None, end=None, count=60, no_llm=False, output_dir=OUTPUT_DIR, in
         'records': records,
         'trips': trips,
         'xlsx_path': xlsx_path,
+        'package_dir': str(package_dir) if package_dir else None,
         'review_path': str(review_path) if review_path else None,
         'results_path': str(results_path),
         'agent_task': agent_task,

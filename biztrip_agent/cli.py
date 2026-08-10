@@ -338,8 +338,6 @@ def scan(args):
     )
     if result and result.get("review_path"):
         print(f"Review: {result['review_path']}")
-    if result and result.get("results_path"):
-        print(f"JSON: {result['results_path']}")
     return 0
 
 

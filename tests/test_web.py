@@ -101,7 +101,9 @@ def test_web_hides_saved_results_until_account_is_ready(monkeypatch, tmp_path):
         '{"scan_label":"旧结果","summary":{"record_count":9,"trip_count":3,"total_amount":1234.5}}',
         encoding="utf-8",
     )
-    (output_dir / "差旅汇总_20260731_120000.xlsx").write_text("demo", encoding="utf-8")
+    package_dir = output_dir / "报销包_20260731_120000"
+    package_dir.mkdir()
+    (package_dir / "差旅汇总_20260731_120000.xlsx").write_text("demo", encoding="utf-8")
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("BIZTRIP_ENV_PATH", raising=False)
     monkeypatch.setattr("biztrip_agent.web._env_path", lambda: env_path)

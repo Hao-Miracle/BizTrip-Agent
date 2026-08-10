@@ -33,10 +33,11 @@ def resolve_results(json_path, answers, output_dir=None):
     if not actions:
         raise ValueError("没有填写可用于解决当前问题的信息。")
 
-    from phase2.agent_report import _generate_excel
     from phase2.llm_aggregate import aggregate_trips, apply_manual_trip_assignments
 
-    target_dir = Path(output_dir) if output_dir else json_path.parent
+    state_dir = json_path.parent
+    default_output_dir = state_dir.parent if state_dir.name == ".biztrip" else state_dir
+    target_dir = Path(output_dir) if output_dir else default_output_dir
     trips = _restore_trips(payload.get("trips", []), records)
     if not trips:
         trips = aggregate_trips(records, use_llm=False)
@@ -54,44 +55,40 @@ def resolve_results(json_path, answers, output_dir=None):
         use_llm=payload.get("agent_task", {}).get("mode") == "agent",
         initial_validation=payload.get("validation"),
         recovery_actions=[*previous_actions, *actions],
-        attachment_dir=json_path.parent / "附件",
+        attachment_dir=state_dir / "附件",
     )
-    total = sum(record.get("金额", 0) or 0 for record in records)
     scan_label = payload.get("scan_label") or "用户确认"
-    xlsx_path = _generate_excel(
-        records,
-        trips,
-        total,
-        scan_label,
-        output_dir=str(target_dir),
-        use_llm=agent_task["mode"] == "agent",
-    )
-    from biztrip_agent.review import generate_review_html
+    xlsx_path = None
+    package_dir = None
+    if agent_task["status"] == "completed":
+        from biztrip_agent.delivery import create_delivery_package
 
-    review_path = generate_review_html(
-        records,
-        trips,
-        target_dir,
-        scan_label,
-        excel_path=xlsx_path,
-        attachment_dir=json_path.parent / "附件",
-    )
+        package = create_delivery_package(
+            records,
+            trips,
+            target_dir,
+            state_dir / "附件",
+            scan_label,
+            use_llm=agent_task["mode"] == "agent",
+        )
+        xlsx_path = package["excel_path"]
+        package_dir = package["package_dir"]
     results_path = write_results_json(
         records,
         trips,
-        target_dir,
+        state_dir,
         scan_label,
         xlsx_path=xlsx_path,
-        review_path=review_path,
         agent_task=agent_task,
-        attachment_dir=json_path.parent / "附件",
+        attachment_dir=state_dir / "附件",
     )
     return {
         "records": records,
         "trips": trips,
         "agent_task": agent_task,
         "xlsx_path": xlsx_path,
-        "review_path": review_path,
+        "review_path": None,
+        "package_dir": package_dir,
         "results_path": results_path,
     }
 
