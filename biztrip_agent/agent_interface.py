@@ -10,6 +10,43 @@ from biztrip_agent.results import load_results_json
 
 
 INTERFACE_SCHEMA = "biztrip.agent-interface.v1"
+AUDIT_SCHEMA = "biztrip.audit.v1"
+AUDIT_RECORD_LIMIT = 20
+
+
+def audit_task(start=None, end=None, count=60, output_dir="output"):
+    """Run a rules-only reimbursement audit without creating a final package."""
+    try:
+        from phase2.agent_report import main as run_agent
+
+        if not _email_configured():
+            return _failure(
+                "audit",
+                "setup_required",
+                "请先在本地 Web 页面完成邮箱账号和授权码配置。",
+                schema=AUDIT_SCHEMA,
+            )
+        with redirect_stdout(io.StringIO()):
+            result = run_agent(
+                start=start,
+                end=end,
+                count=count,
+                no_llm=True,
+                output_dir=output_dir,
+                interactive=False,
+                review=False,
+                deliver=False,
+            )
+    except Exception as exc:
+        return _failure("audit", "engine_error", _safe_error(exc), schema=AUDIT_SCHEMA)
+    if not result or not result.get("results_path"):
+        return _failure(
+            "audit",
+            "audit_not_created",
+            "体检没有完成。请在本地 Web 页面检查邮箱配置和连接状态。",
+            schema=AUDIT_SCHEMA,
+        )
+    return audit_snapshot(result["results_path"])
 
 
 def start_task(start=None, end=None, count=60, no_llm=False, output_dir="output"):
@@ -17,7 +54,7 @@ def start_task(start=None, end=None, count=60, no_llm=False, output_dir="output"
     try:
         from phase2.agent_report import main as run_agent
 
-        if not _account_configured():
+        if not _agent_configured():
             return _failure(
                 "start",
                 "setup_required",
@@ -155,9 +192,9 @@ def _next_action(status):
     return "inspect_error"
 
 
-def _failure(operation, code, message, task_path=None):
+def _failure(operation, code, message, task_path=None, schema=INTERFACE_SCHEMA):
     return {
-        "schema_version": INTERFACE_SCHEMA,
+        "schema_version": schema,
         "operation": operation,
         "ok": False,
         "status": "failed",
@@ -172,14 +209,97 @@ def _safe_error(exc):
     return message[:500] if message else exc.__class__.__name__
 
 
-def _account_configured():
+def _email_configured():
     from common.utils import get_email_config
 
     account, password, _server, _port = get_email_config()
+    return bool(account and password)
+
+
+def _agent_configured():
     return bool(
-        account
-        and password
+        _email_configured()
         and os.getenv("LLM_API_KEY")
         and os.getenv("LLM_BASE_URL")
         and os.getenv("LLM_MODEL")
     )
+
+
+def audit_snapshot(task_path):
+    """Return a bounded, non-secret summary for the host Agent to explain."""
+    path = Path(task_path).expanduser().resolve()
+    try:
+        payload = load_results_json(path)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        return _failure("audit", "audit_unreadable", _safe_error(exc), schema=AUDIT_SCHEMA)
+
+    records = payload.get("records", [])
+    validation_records = {
+        item.get("index"): item.get("issues", [])
+        for item in payload.get("validation", {}).get("records", [])
+    }
+    categories = {}
+    public_records = []
+    for index, record in enumerate(records, 1):
+        category = str(record.get("分类") or "其他")
+        bucket = categories.setdefault(category, {"count": 0, "amount": 0})
+        bucket["count"] += 1
+        bucket["amount"] += record.get("金额", 0) or 0
+        if len(public_records) < AUDIT_RECORD_LIMIT:
+            public_records.append(_public_audit_record(index, record, validation_records.get(index, [])))
+
+    summary = payload.get("summary", {})
+    return {
+        "schema_version": AUDIT_SCHEMA,
+        "operation": "audit",
+        "ok": True,
+        "status": "audit_ready",
+        "summary": {
+            "scan_label": payload.get("scan_label", ""),
+            "record_count": summary.get("record_count", 0),
+            "trip_count": summary.get("trip_count", 0),
+            "total_amount": summary.get("total_amount", 0),
+            "complete_record_count": summary.get("complete_count", 0),
+            "affected_record_count": summary.get("affected_count", 0),
+            "issue_count": summary.get("issue_count", 0),
+        },
+        "categories": categories,
+        "trips": [_public_audit_trip(trip) for trip in payload.get("trips", [])],
+        "records": public_records,
+        "records_truncated": len(records) > AUDIT_RECORD_LIMIT,
+        "files": {"package_dir": "", "excel": ""},
+        "next_action": "present_audit",
+        "full_package": {
+            "requires": "local_personal_app",
+            "message": "安装本地个人版后可生成完整 Excel 和原件报销包。",
+        },
+    }
+
+
+def _public_audit_record(index, record, issues):
+    return {
+        "record_index": index,
+        "category": record.get("分类", ""),
+        "date": record.get("日期") or record.get("入住日期") or "",
+        "vendor": record.get("供应商") or record.get("平台") or record.get("商家") or "",
+        "amount": record.get("金额", ""),
+        "route": _audit_route(record),
+        "issue_codes": [issue.get("code", "") for issue in issues],
+    }
+
+
+def _public_audit_trip(trip):
+    return {
+        "trip_id": trip.get("trip_id", ""),
+        "destination": trip.get("destination", ""),
+        "start_date": trip.get("start_date", ""),
+        "end_date": trip.get("end_date", ""),
+        "total": trip.get("total", 0),
+        "summary": trip.get("summary", ""),
+    }
+
+
+def _audit_route(record):
+    start = record.get("出发地") or record.get("上车地点") or ""
+    end = record.get("目的地") or record.get("下车地点") or ""
+    return f"{start}→{end}" if start and end else start or end

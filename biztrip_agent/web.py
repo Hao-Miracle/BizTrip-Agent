@@ -1199,7 +1199,7 @@ def _config_html():
       {account_html}
     </section>
     <section class="config">
-      <h2>Agent 模型</h2>
+      <h2>个人版 Agent 模型</h2>
       {llm_html}
     </section>
     <section class="config">
@@ -1215,8 +1215,8 @@ def _onboarding_html(values, configured):
     if values.get("EMAIL_ACCOUNT") and values.get("EMAIL_PASSWORD"):
         return """
     <section class="config">
-      <h2>启用 Agent</h2>
-      <div class="sub">邮箱已经准备好。继续配置你自己的模型接口，系统才会开始正式任务。</div>
+      <h2>选择下一步</h2>
+      <div class="sub">邮箱已经准备好。通过 Skill 做报销体检时可直接返回 Agent；需要生成完整 Excel 和原件包时，再配置下面的个人版 Agent 模型。</div>
       <ol class="steps">
         <li>从兼容 OpenAI 协议的模型服务获取 API Key。</li>
         <li>填写接口地址、API Key 和模型名称。</li>
@@ -1353,6 +1353,7 @@ def _llm_config_html(values):
     llm_enabled = bool(values.get("LLM_API_KEY"))
     llm_status = "已配置。每次任务都会自动调用；规则引擎只在模型失败或证据不足时兜底。" if llm_enabled else "填写你自己的接口地址和 API Key。低成本模型即可完成大多数邮件识别任务。"
     return f"""
+      <div class="sub">用于本地个人版生成完整报销包。通过 Skill 做体检时复用你 Agent 的模型，无需在这里重复配置。</div>
       <div class="sub">{html.escape(llm_status)}</div>
       <div class="sub">云端模型会接收必要的邮件和票据文本；需要数据完全留在本机时，请填写本地模型接口。</div>
       <form method="post" action="/config">
