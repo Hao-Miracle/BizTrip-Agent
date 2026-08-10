@@ -98,13 +98,13 @@ biztrip init
 
 该命令会从 `.env.example` 创建 `.env`。编辑 `.env` 后再扫描真实邮箱。
 
-### Agent 模式
+### 本地个人版 Agent 模式
 
 ```bash
 biztrip scan
 ```
 
-Agent 使用模型理解邮件、提取复杂字段并按时间和目的地归并行程。本地规则继续负责原文证据核验、金额计算和模型故障兜底。正式任务需要先配置 `LLM_BASE_URL`、`LLM_API_KEY` 和 `LLM_MODEL`。
+本地个人版使用用户配置的模型理解邮件、提取复杂字段并按时间和目的地归并行程。本地规则继续负责原文证据核验、金额计算和模型故障兜底。生成完整报销包前需要配置 `LLM_BASE_URL`、`LLM_API_KEY` 和 `LLM_MODEL`。通过 Skill 做体检时复用宿主 Agent 模型，不需要这些额外配置。
 
 旧入口仍可用：
 

@@ -61,6 +61,13 @@ def main(argv=None):
     )
     agent_parser = subparsers.add_parser("agent", help="Machine-readable interface for Agent skills.")
     agent_commands = agent_parser.add_subparsers(dest="agent_command", required=True)
+    agent_audit = agent_commands.add_parser(
+        "audit", help="Inspect one reimbursement period without creating a final package."
+    )
+    agent_audit.add_argument("--start", help="Start date in YYYY-MM-DD format.")
+    agent_audit.add_argument("--end", help="End date in YYYY-MM-DD format.")
+    agent_audit.add_argument("--count", type=int, default=60)
+    agent_audit.add_argument("--output-dir", default=str(OUTPUT_DIR))
     agent_start = agent_commands.add_parser("start", help="Start a reimbursement task and return JSON.")
     agent_start.add_argument("--start", help="Start date in YYYY-MM-DD format.")
     agent_start.add_argument("--end", help="End date in YYYY-MM-DD format.")
@@ -101,9 +108,22 @@ def main(argv=None):
 
 def agent_command(args):
     """Run the stable JSON-only interface used by thin Agent skills."""
-    from biztrip_agent.agent_interface import answer_task, start_task, task_status
+    from biztrip_agent.agent_interface import audit_task, answer_task, start_task, task_status
 
-    if args.agent_command == "start":
+    if args.agent_command == "audit":
+        error = _audit_range_error(args.start, args.end, args.count)
+        if error:
+            payload = {
+                "schema_version": "biztrip.audit.v1",
+                "operation": "audit",
+                "ok": False,
+                "status": "failed",
+                "error": {"code": "invalid_range", "message": error},
+                "next_action": "inspect_error",
+            }
+        else:
+            payload = audit_task(args.start, args.end, args.count, args.output_dir)
+    elif args.agent_command == "start":
         if args.count < 1 or any(
             value and not _is_date(value) for value in (args.start, args.end)
         ):
@@ -453,6 +473,24 @@ def _is_date(value):
     except ValueError:
         return False
     return True
+
+
+def _audit_range_error(start, end, count):
+    if count < 1 or count > 60:
+        return "体检最多扫描最近 60 封邮件。"
+    if bool(start) != bool(end):
+        return "按日期体检时必须同时提供开始和结束日期。"
+    if not start:
+        return ""
+    if not _is_date(start) or not _is_date(end):
+        return "日期必须使用 YYYY-MM-DD 格式。"
+    start_date = datetime.strptime(start, "%Y-%m-%d")
+    end_date = datetime.strptime(end, "%Y-%m-%d")
+    if end_date < start_date:
+        return "结束日期不能早于开始日期。"
+    if (end_date - start_date).days > 30:
+        return "Skill 体检最多覆盖连续 31 天。"
+    return ""
 
 
 def _confirm(prompt, default=False):

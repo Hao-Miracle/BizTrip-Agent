@@ -1,37 +1,37 @@
-# Agent Interface Schema
+# Skill Audit Result Schema
 
-Every command writes one JSON object using schema `biztrip.agent-interface.v1`.
+The audit command writes one JSON object using schema `biztrip.audit.v1`.
 
-## Common fields
+## Command
 
-- `ok`: Whether the operation itself succeeded.
-- `status`: `completed`, `needs_user_input`, or `failed`.
-- `operation`: `start`, `status`, or `answer`.
-- `task_path`: Internal task identifier. Preserve it for subsequent calls.
-- `next_action`: `deliver_package`, `ask_user`, or `inspect_error`.
+```bash
+biztrip agent audit --start YYYY-MM-DD --end YYYY-MM-DD
+biztrip agent audit --count 60
+```
 
-## Successful task
+## Successful audit
 
+- `ok`: `true`.
+- `operation`: `audit`.
+- `status`: `audit_ready`.
 - `summary.scan_label`: Processed date or mail range.
 - `summary.record_count`: Recognized reimbursement records.
-- `summary.trip_count`: Grouped trips.
-- `summary.total_amount`: Current verified and unverified recognized total.
-- `summary.issue_count`: Remaining validation issues.
-- `questions`: User-confirmable unresolved issues.
-- `files.package_dir`: Present only after verified completion.
-- `files.excel`: Present only after verified completion.
+- `summary.trip_count`: Detected trips.
+- `summary.total_amount`: Estimated recognized total.
+- `summary.complete_record_count`: Records with no detected completeness issue.
+- `summary.affected_record_count`: Records affected by at least one issue.
+- `summary.issue_count`: Total detected issues.
+- `categories`: Counts and amounts grouped by expense category.
+- `trips`: Detected trip summaries.
+- `records`: A bounded preview of records and issue codes.
+- `records_truncated`: Whether additional records were omitted from the response.
+- `files.package_dir`: Always empty in Skill audit mode.
+- `files.excel`: Always empty in Skill audit mode.
+- `next_action`: `present_audit`.
+- `full_package.requires`: `local_personal_app`.
 
-## Question
-
-- `record_index`: Stable record position for an answer.
-- `issue_codes`: Allowed confirmation types.
-- `prompt`: User-facing question.
-- `context`: Non-secret evidence describing the record.
-- `options`: Engine-approved choices when applicable.
-- `attachment_requires_web`: The local Web page is required to add an original document.
-
-Submit only combinations returned by the current task. The engine rejects stale or unrelated answers.
+The host Agent explains these facts but must not silently repair them. This schema intentionally has no answer submission or package delivery operation.
 
 ## Failure
 
-When `ok` is false, use `error.code` for routing and show `error.message` in plain language. Do not retry repeatedly when configuration or user evidence is required.
+When `ok` is false, use `error.code` for routing and show `error.message` in plain language. `setup_required` means the user must save mailbox details on the local page. A Skill audit never requires a separate model API key.

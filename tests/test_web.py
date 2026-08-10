@@ -52,7 +52,8 @@ def test_web_home_contains_local_workflows(monkeypatch, tmp_path):
     assert "报销结束日期" in html
     assert "高级扫描选项" in html
     assert "维护工具" in html
-    assert "Agent 模型" in html
+    assert "个人版 Agent 模型" in html
+    assert "通过 Skill 做体检时复用你 Agent 的模型" in html
     assert "接口地址" in html
     assert "API Key" in html
     assert "模型名称" in html
