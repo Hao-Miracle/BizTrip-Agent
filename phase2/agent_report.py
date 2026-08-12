@@ -353,6 +353,8 @@ def main(
     conn.logout()
 
     records = _filter_records_by_requested_dates(records, start, end)
+    llm_count = sum(str(record.get('方法', '')).startswith('LLM') for record in records)
+    rule_count = len(records) - llm_count
 
     if not records:
         print('\n所选日期范围内未发现可用的差旅凭证')
