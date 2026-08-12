@@ -23,6 +23,7 @@ from urllib.parse import parse_qs, urlparse
 
 JOBS = {}
 JOBS_LOCK = threading.Lock()
+LLM_VALIDATION_CACHE = set()
 MAX_JOBS = 20
 MAX_POST_BYTES = 25 * 1024 * 1024
 
@@ -708,6 +709,9 @@ def _preflight_scan(output_dir):
         return "请先配置 Agent 模型接口地址。"
     if not env_flags.get("LLM_MODEL"):
         return "请先配置 Agent 模型名称。"
+    llm_error = _validate_llm_connection()
+    if llm_error:
+        return llm_error
     output_path = Path(output_dir)
     try:
         output_path.mkdir(parents=True, exist_ok=True)
@@ -716,6 +720,40 @@ def _preflight_scan(output_dir):
         probe.unlink()
     except OSError:
         return "输出目录不可写，请换一个目录。"
+    return None
+
+
+def _validate_llm_connection():
+    """Verify model credentials without sending email or reimbursement data."""
+    values = _read_env_values(_env_path())
+    base_url = values.get("LLM_BASE_URL", "").strip()
+    api_key = values.get("LLM_API_KEY", "").strip()
+    model = values.get("LLM_MODEL", "").strip()
+    fingerprint = (base_url, api_key[-8:], model)
+    if fingerprint in LLM_VALIDATION_CACHE:
+        return None
+    try:
+        from openai import OpenAI
+
+        client = OpenAI(api_key=api_key, base_url=base_url, timeout=15.0)
+        response = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": "Reply with OK."}],
+            temperature=0,
+            max_tokens=5,
+        )
+        if not response.choices:
+            return "模型连接失败：服务没有返回有效结果，请检查接口地址和模型名称。"
+    except Exception as exc:
+        lowered = str(exc).lower()
+        if "401" in lowered or "authentication" in lowered or "api key" in lowered:
+            return "模型连接失败：API Key 无效或已失效，请重新填写。"
+        if "model" in lowered and ("not found" in lowered or "invalid" in lowered):
+            return "模型连接失败：模型名称不可用，请向服务商确认正确名称。"
+        if "timeout" in lowered or "connection" in lowered or "network" in lowered:
+            return "模型连接失败：接口地址无法访问，请检查地址和网络。"
+        return "模型连接失败：请检查接口地址、API Key 和模型名称。"
+    LLM_VALIDATION_CACHE.add(fingerprint)
     return None
 
 

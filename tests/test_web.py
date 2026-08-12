@@ -298,6 +298,22 @@ def test_scan_preflight_requires_agent_model_config(monkeypatch, tmp_path):
     assert _preflight_scan(tmp_path) == "请先配置 Agent 模型接口地址。"
 
 
+def test_scan_preflight_stops_when_llm_credentials_are_invalid(monkeypatch, tmp_path):
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "EMAIL_ACCOUNT=user@example.com\nEMAIL_PASSWORD=mail-token\n"
+        "LLM_API_KEY=bad-key\nLLM_BASE_URL=https://api.example.com\nLLM_MODEL=model\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("biztrip_agent.web._env_path", lambda: env_path)
+    monkeypatch.setattr(
+        "biztrip_agent.web._validate_llm_connection",
+        lambda: "模型连接失败：API Key 无效或已失效，请重新填写。",
+    )
+
+    assert "API Key 无效" in _preflight_scan(tmp_path / "output")
+
+
 def test_background_job_records_failure():
     def fail():
         raise RuntimeError("authentication failed")
