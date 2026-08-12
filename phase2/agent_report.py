@@ -142,18 +142,23 @@ def enrich_records_from_attachments(records, output_dir=OUTPUT_DIR, text_reader=
     """Backfill fields that can be recovered from archived attachments."""
     attach_dir = os.path.join(str(output_dir), '附件')
     for record in records:
-        if record.get('金额', '') not in ('', None):
-            continue
-        if infer_vendor(record) != '12306':
+        if record.get('金额', '') not in ('', None) and record.get('日期'):
             continue
         text = (
             text_reader(record.get('附件', ''))
             if text_reader
             else _attachment_text(record.get('附件', ''), attach_dir)
         )
-        amount = _fallback_12306_amount(text)
-        if amount:
-            record['金额'] = amount
+        evidence = f"{record.get('附件', '')}\n{text}"
+        recovered = extract_record(evidence, record.get('主题', ''), record.get('分类', '发票'), use_llm=False)
+        if record.get('金额', '') in ('', None) and recovered.get('金额') not in ('', None):
+            record['金额'] = recovered['金额']
+        if not record.get('日期') and recovered.get('日期'):
+            record['日期'] = recovered['日期']
+        if record.get('金额', '') in ('', None) and infer_vendor(record) == '12306':
+            amount = _fallback_12306_amount(evidence)
+            if amount:
+                record['金额'] = amount
     return records
 
 
@@ -176,6 +181,12 @@ def _attachment_text(attachment_value, attach_dir):
                     for info in zf.infolist():
                         if info.filename.lower().endswith('.pdf'):
                             texts.append(_pdf_text_from_bytes(zf.read(info.filename)))
+            except Exception:
+                continue
+        elif name.lower().endswith('.eml'):
+            try:
+                with open(path, 'rb') as file:
+                    texts.append(get_email_text(email.message_from_bytes(file.read())))
             except Exception:
                 continue
     return '\n'.join(texts)
@@ -344,6 +355,8 @@ def main(
                         record['出发地'] = pdf_info['出发地']
                     if pdf_info.get('目的地'):
                         record['目的地'] = pdf_info['目的地']
+                    if pdf_info.get('出行人'):
+                        record['出行人'] = pdf_info['出行人']
                     record_attachments = _attachments_for_pdf(pdf['filename'], attachments)
                     records.append(enrich_record(record, subject, sender, record_attachments, body))
                 continue
@@ -364,6 +377,7 @@ def main(
     conn.logout()
 
     records = _filter_records_by_requested_dates(records, start, end)
+    records = _merge_duplicate_documents(records)
     llm_count = sum(str(record.get('方法', '')).startswith('LLM') for record in records)
     rule_count = len(records) - llm_count
 
@@ -538,6 +552,34 @@ def _filter_records_by_requested_dates(records, start, end):
     return filtered
 
 
+def _merge_duplicate_documents(records):
+    """Merge repeated copies of the same invoice while preserving all originals."""
+    merged = []
+    invoice_positions = {}
+    for record in records:
+        if record.get('分类') != '发票':
+            merged.append(record)
+            continue
+        identifier = str(record.get('发票号码') or record.get('发票号') or record.get('订单号') or '').strip()
+        if not identifier:
+            merged.append(record)
+            continue
+        key = (identifier, str(record.get('日期') or ''), str(record.get('金额') or ''))
+        if key not in invoice_positions:
+            invoice_positions[key] = len(merged)
+            merged.append(record)
+            continue
+        existing = merged[invoice_positions[key]]
+        names = []
+        for value in (existing.get('附件', ''), record.get('附件', '')):
+            for name in str(value or '').split(';'):
+                name = name.strip()
+                if name and name not in names:
+                    names.append(name)
+        existing['附件'] = '; '.join(names)
+    return merged
+
+
 def _get_pdf_attachments_raw(msg):
     """提取邮件中所有 PDF 附件"""
     pdfs = []
@@ -568,16 +610,28 @@ def _attachments_for_pdf(filename, saved_attachments):
 
 def _parse_pdf_filename(fn):
     """从 PDF 文件名解析日期/路线/金额"""
-    info = {'日期': '', '出发地': '', '目的地': '', '金额': ''}
+    info = {'日期': '', '出发地': '', '目的地': '', '金额': '', '出行人': ''}
     # 日期
     m = re.search(r'(\d{4})[-年](\d{1,2})[-月](\d{1,2})', fn)
     if m:
         info['日期'] = f"{m.group(1)}-{m.group(2).zfill(2)}-{m.group(3).zfill(2)}"
-    # 路线
-    m = re.search(r'([\u4e00-\u9fa5]{2,4})-([\u4e00-\u9fa5]{2,4})', fn)
-    if m:
-        info['出发地'] = m.group(1)
-        info['目的地'] = m.group(2)
+    # 批量机票文件名：日期 路线-订单号-乘机人-机票电子发票-金额.pdf
+    ticket = re.search(
+        r'\d{4}-\d{1,2}-\d{1,2}\s+(.+?)-(\d{8,})-([\u4e00-\u9fa5]{2,8})-机票电子',
+        fn,
+    )
+    if ticket:
+        route = ticket.group(1).strip()
+        info['出行人'] = ticket.group(3)
+        route_match = re.search(r'([\u4e00-\u9fa5]{2,8})(?:往返|[-→])([\u4e00-\u9fa5]{2,8})', route)
+        if route_match:
+            info['出发地'] = route_match.group(1)
+            info['目的地'] = route_match.group(2)
+    else:
+        m = re.search(r'([\u4e00-\u9fa5]{2,4})-([\u4e00-\u9fa5]{2,4})', fn)
+        if m:
+            info['出发地'] = m.group(1)
+            info['目的地'] = m.group(2)
     # 金额
     m = re.search(r'(\d+\.\d{2})\.pdf$', fn)
     if m:
@@ -805,7 +859,7 @@ def _generate_excel(records, trips, total_amount, scan_label, output_dir=OUTPUT_
             cell.fill = rf
 
     os.makedirs(output_dir, exist_ok=True)
-    xlsx_path = unique_output_path(output_dir, '差旅汇总', '.xlsx')
+    xlsx_path = unique_output_path(output_dir, '差旅汇总', '.xlsx', scan_label)
     wb.save(xlsx_path)
     return str(xlsx_path)
 

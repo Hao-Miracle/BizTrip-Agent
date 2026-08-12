@@ -9,9 +9,43 @@ from phase2.agent_report import (
     _attachments_for_pdf,
     _build_search_query,
     _filter_records_by_requested_dates,
+    _merge_duplicate_documents,
+    _parse_pdf_filename,
     enrich_records_from_attachments,
     infer_vendor,
 )
+
+
+def test_output_names_include_requested_range(tmp_path):
+    path = write_results_json([], [], tmp_path, "2024-01-01~2026-07-30")
+
+    assert path.name.startswith("records_2024-01-01_2026-07-30_")
+
+
+def test_repeated_invoice_is_merged_but_different_passengers_are_preserved():
+    records = [
+        {"分类": "发票", "订单号": "INV001", "日期": "2024-07-29", "金额": 180.0, "附件": "first.pdf"},
+        {"分类": "发票", "订单号": "INV001", "日期": "2024-07-29", "金额": 180.0, "附件": "second.pdf"},
+        {"分类": "机票", "订单号": "FLIGHT001", "日期": "2025-07-23", "金额": 1506.5, "出行人": "甲", "附件": "a.pdf"},
+        {"分类": "机票", "订单号": "FLIGHT001", "日期": "2025-07-23", "金额": 1506.5, "出行人": "乙", "附件": "b.pdf"},
+    ]
+
+    merged = _merge_duplicate_documents(records)
+
+    assert len(merged) == 3
+    assert merged[0]["附件"] == "first.pdf; second.pdf"
+    assert [record.get("出行人") for record in merged[1:]] == ["甲", "乙"]
+
+
+def test_group_flight_filename_extracts_passenger_and_route():
+    result = _parse_pdf_filename(
+        "2025-07-23 成都往返深圳-204150492869-王明春-机票电子发票-1506.50.pdf"
+    )
+
+    assert result["出行人"] == "王明春"
+    assert result["出发地"] == "成都"
+    assert result["目的地"] == "深圳"
+    assert result["金额"] == 1506.5
 
 
 def test_write_results_json_persists_summary_and_records(tmp_path):

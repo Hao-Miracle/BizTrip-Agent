@@ -98,6 +98,18 @@ def test_validation_flags_exact_duplicate_order_items():
     assert all(any(issue["code"] == "possible_duplicate" for issue in row["issues"]) for row in validation["records"])
 
 
+def test_validation_allows_multiple_passenger_tickets_in_one_booking():
+    records = [
+        {"分类": "机票", "平台": "去哪儿网", "金额": 1506.5, "日期": "2025-07-23", "订单号": "QD001", "出行人": "甲", "附件": "a.pdf"},
+        {"分类": "机票", "平台": "去哪儿网", "金额": 1506.5, "日期": "2025-07-23", "订单号": "QD001", "出行人": "乙", "附件": "b.pdf"},
+    ]
+
+    validation = validate_reimbursement(records, [{"records": records}])
+
+    assert validation["status"] == "ready"
+    assert validation["issue_count"] == 0
+
+
 def test_validation_flags_conflicting_invoice_numbers():
     records = [
         {"分类": "发票", "供应商": "商店", "金额": 20.0, "日期": "2026-07-10", "发票号码": "INV001", "附件": "a.pdf"},

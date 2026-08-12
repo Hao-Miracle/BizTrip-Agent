@@ -104,6 +104,15 @@ def _flag_identifier_collisions(records, results):
     for (order_number, _amount, _date), indices in order_groups.items():
         if len(indices) < 2:
             continue
+        grouped = [records[index] for index in indices]
+        if all(record.get("分类") == "机票" for record in grouped):
+            passengers = {
+                _text(record.get("出行人") or record.get("乘机人") or record.get("乘车人"))
+                for record in grouped
+            }
+            passengers.discard("")
+            if len(passengers) == len(grouped):
+                continue
         for index in indices:
             _add_issue(results[index], "possible_duplicate", f"疑似重复（订单号 {order_number}，日期和金额相同）")
 

@@ -3,6 +3,7 @@
 import json
 from datetime import datetime
 from pathlib import Path
+import re
 
 
 SCHEMA_VERSION = "biztrip.records.v1"
@@ -13,10 +14,18 @@ def output_timestamp():
     return datetime.now().strftime("%Y%m%d_%H%M%S")
 
 
-def unique_output_path(directory, stem, suffix):
+def output_label(scan_label):
+    """Return a filesystem-safe label that identifies the requested range."""
+    label = str(scan_label or "").strip().replace("~", "_")
+    label = re.sub(r"[^0-9A-Za-z\u4e00-\u9fff._-]+", "_", label).strip("_.-")
+    return label[:80] or "未命名范围"
+
+
+def unique_output_path(directory, stem, suffix, scan_label=None):
     """Return a non-overwriting path under directory."""
     directory = Path(directory)
-    path = directory / f"{stem}_{output_timestamp()}{suffix}"
+    label = f"_{output_label(scan_label)}" if scan_label else ""
+    path = directory / f"{stem}{label}_{output_timestamp()}{suffix}"
     if not path.exists():
         return path
     index = 1
@@ -46,7 +55,7 @@ def write_results_json(
     public_trips = _without_private_fields(trips)
     total = sum(record.get("金额", 0) or 0 for record in public_records)
     validation = validate_reimbursement(public_records, public_trips, attachment_dir=attachment_dir)
-    path = unique_output_path(output_dir, "records", ".json")
+    path = unique_output_path(output_dir, "records", ".json", scan_label)
 
     payload = {
         "schema_version": SCHEMA_VERSION,

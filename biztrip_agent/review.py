@@ -19,7 +19,7 @@ def generate_review_html(records, trips, output_dir, scan_label, excel_path=None
     issues = _issue_rows(records, validation)
     categories = _category_totals(records)
     generated_at = datetime.now().strftime("%Y-%m-%d %H:%M")
-    review_path = unique_output_path(output_dir, "review", ".html")
+    review_path = unique_output_path(output_dir, "review", ".html", scan_label)
 
     html = f"""<!doctype html>
 <html lang="zh-CN">
