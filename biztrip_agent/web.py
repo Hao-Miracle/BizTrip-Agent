@@ -55,7 +55,7 @@ class BizTripWebHandler(BaseHTTPRequestHandler):
         if parsed.path in {"/", "/index.html"}:
             job_id = parse_qs(parsed.query).get("job", [""])[0]
             job = _job_snapshot(job_id) if job_id else None
-            if job and job.get("status") == "completed":
+            if job and job.get("status") == "succeeded":
                 self._send_html(render_home(files=job.get("files"), result_summary=job.get("summary"), show_current_result=True))
             else:
                 self._send_html(render_home())
@@ -144,7 +144,6 @@ def render_home(message=None, error=None, files=None, result_summary=None, show_
     readiness_html = _readiness_html(readiness_status())
     config_html = _config_html()
     saved_result = _latest_result_payload(_default_output_dir()) if show_current_result else None
-    recent_html = _files_html(files or [])
     summary_html = _summary_html(result_summary) if result_summary else ""
     resolution_html = _agent_resolution_html(payload_result=saved_result) if saved_result else ""
     return f"""<!doctype html>
@@ -342,7 +341,6 @@ def render_home(message=None, error=None, files=None, result_summary=None, show_
     {files_html}
     {summary_html}
     {resolution_html}
-    {recent_html}
     <section id="job-panel" class="job">
       <h2>任务进度</h2>
       <div id="job-state" class="job-state">等待提交</div>
@@ -390,7 +388,7 @@ def render_home(message=None, error=None, files=None, result_summary=None, show_
       }}
       if (job.status === "queued" || job.status === "running") {{
         setTimeout(() => pollJob(jobId), 1200);
-      }} else if (job.status === "completed") {{
+      }} else if (job.status === "succeeded") {{
         setTimeout(() => window.location.assign(`/?job=${{jobId}}`), 500);
       }}
     }}
@@ -619,12 +617,14 @@ def _run_account(form):
 def _scan_job(args, output_dir):
     from biztrip_agent.cli import scan
 
+    before = {path.resolve() for path in _latest_files(output_dir)}
     exit_code = scan(args)
     if exit_code != 0:
         raise RuntimeError("扫描失败，请检查邮箱授权码、IMAP 设置、网络连接和终端错误信息。")
+    current_files = [path for path in _latest_files(output_dir) if path.resolve() not in before]
     return {
         "message": "扫描完成。",
-        "files": [str(path) for path in _latest_files(output_dir)],
+        "files": [str(path) for path in current_files],
         "summary": _result_summary(output_dir),
     }
 
@@ -1158,7 +1158,11 @@ def _files_html(files):
     if not files:
         return ""
     rows = "".join(f"<li>{html.escape(str(path))}</li>" for path in files)
-    return f'<section class="files"><h2>生成文件</h2><ul>{rows}</ul></section>'
+    return (
+        '<section class="files"><h2>生成文件</h2><ul>'
+        f'{rows}</ul><form method="post" action="/open-output">'
+        '<button type="submit">打开报销文件夹</button></form></section>'
+    )
 
 
 def _summary_html(summary):
@@ -1423,7 +1427,7 @@ def _scan_html(configured):
 
 def _llm_config_html(values):
     llm_enabled = bool(values.get("LLM_API_KEY"))
-    llm_status = "已配置。每次任务都会自动调用；规则引擎只在模型失败或证据不足时兜底。" if llm_enabled else "填写你自己的接口地址和 API Key。低成本模型即可完成大多数邮件识别任务。"
+    llm_status = "已配置。规则无法可靠识别或缺少关键字段时自动调用，避免不必要的模型费用。" if llm_enabled else "填写你自己的接口地址和 API Key。低成本模型即可完成大多数邮件识别任务。"
     return f"""
       <div class="sub">用于本地个人版生成完整报销包。通过 Skill 做体检时复用你 Agent 的模型，无需在这里重复配置。</div>
       <div class="sub">{html.escape(llm_status)}</div>

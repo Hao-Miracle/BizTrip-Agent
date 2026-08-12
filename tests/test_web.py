@@ -25,6 +25,7 @@ from biztrip_agent.web import (
     _shutdown_html,
     _run_demo,
     _run_scan,
+    _scan_job,
     _summary_html,
     _start_job,
     _using_temporary_env,
@@ -242,6 +243,36 @@ def test_web_primary_scan_uses_user_reimbursement_period(monkeypatch, tmp_path):
     assert args.start == "2026-07-01"
     assert args.end == "2026-07-30"
     assert args.count == 60
+
+
+def test_scan_job_returns_only_files_created_by_current_run(monkeypatch, tmp_path):
+    old_review = tmp_path / "review_old.html"
+    old_review.write_text("old", encoding="utf-8")
+
+    def fake_scan(_args):
+        package = tmp_path / "报销包_new"
+        package.mkdir()
+        (package / "差旅汇总_new.xlsx").write_text("new", encoding="utf-8")
+        return 0
+
+    monkeypatch.setattr("biztrip_agent.cli.scan", fake_scan)
+    monkeypatch.setattr("biztrip_agent.web._result_summary", lambda _output_dir: {"record_count": 1})
+
+    result = _scan_job(object(), tmp_path)
+
+    assert result["files"] == [str(tmp_path / "报销包_new" / "差旅汇总_new.xlsx")]
+    assert str(old_review) not in result["files"]
+
+
+def test_current_result_renders_files_once_with_open_action():
+    html = render_home(
+        files=["output/报销包_test/差旅汇总_test.xlsx"],
+        result_summary={"submission_status": "ready", "record_count": 1},
+        show_current_result=True,
+    )
+
+    assert html.count("<h2>生成文件</h2>") == 1
+    assert "打开报销文件夹" in html
 
 
 def test_account_form_saves_config_and_infers_imap(monkeypatch, tmp_path):
