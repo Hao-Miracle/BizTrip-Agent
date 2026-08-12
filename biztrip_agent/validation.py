@@ -2,13 +2,15 @@
 
 from collections import defaultdict
 from datetime import datetime
+from email import policy
+from email.parser import BytesParser
 import math
 from pathlib import Path
 
 
 TRIP_CATEGORIES = {"机票", "火车票", "酒店", "网约车", "门票"}
 UNIQUE_IDENTIFIER_FIELDS = ("发票号码", "发票号")
-SUPPORTED_ATTACHMENT_SUFFIXES = {".pdf", ".zip", ".jpg", ".jpeg", ".png", ".heic"}
+SUPPORTED_ATTACHMENT_SUFFIXES = {".pdf", ".zip", ".jpg", ".jpeg", ".png", ".heic", ".eml"}
 
 
 def validate_reimbursement(records, trips, attachment_dir=None):
@@ -182,11 +184,19 @@ def _validate_attachment_names(record, result, attachment_dir=None):
 
 def _readable_attachment(path, suffix):
     try:
-        data = path.read_bytes()[:64]
+        raw_data = path.read_bytes()
     except OSError:
         return False
-    if not data:
+    if not raw_data:
         return False
+    if suffix == ".eml":
+        try:
+            message = BytesParser(policy=policy.default).parsebytes(raw_data)
+        except (TypeError, ValueError):
+            return False
+        return bool(message.get("Subject") and message.get("From"))
+
+    data = raw_data[:64]
     checks = {
         ".pdf": data.lstrip().startswith(b"%PDF"),
         ".zip": data.startswith(b"PK\x03\x04") or data.startswith(b"PK\x05\x06"),

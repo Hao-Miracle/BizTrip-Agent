@@ -89,6 +89,15 @@ def save_attachments(msg, email_idx, attach_dir=ATTACH_DIR):
     return saved
 
 
+def save_email_evidence(msg, email_idx, attach_dir=ATTACH_DIR):
+    """Archive the original relevant email when the provider sends no attachment."""
+    filename = f'{email_idx}_邮件原文.eml'
+    path = os.path.join(attach_dir, filename)
+    with open(path, 'wb') as file:
+        file.write(msg.as_bytes())
+    return filename
+
+
 def infer_vendor(record):
     """Infer supplier/platform from structured fields and email context."""
     for key in ('酒店名称', '供应商', '平台', '服务商', '商家', '航空公司'):
@@ -314,6 +323,8 @@ def main(
             continue
 
         attachments = save_attachments(msg, idx, attach_dir=attach_dir)
+        if not attachments:
+            attachments = [save_email_evidence(msg, idx, attach_dir=attach_dir)]
 
         # 提取（LLM 或规则）
         extract_result = extract_record(body, subject, category, use_llm=use_llm)

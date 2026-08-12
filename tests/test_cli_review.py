@@ -200,6 +200,28 @@ def test_validation_checks_physical_attachment_when_directory_is_provided(tmp_pa
     }
 
 
+def test_validation_accepts_complete_email_source_evidence(tmp_path):
+    record = {
+        "分类": "发票",
+        "供应商": "测试商店",
+        "金额": 20.0,
+        "日期": "2026-08-01",
+        "附件": "invoice.eml",
+    }
+    long_received_header = b"Received: " + (b"mail-hop " * 20) + b"\r\n"
+    (tmp_path / "invoice.eml").write_bytes(
+        long_received_header
+        + b"From: invoice@example.com\r\n"
+        + b"Subject: Invoice notice\r\n"
+        + b"\r\nInvoice details"
+    )
+
+    validation = validate_reimbursement([record], [], attachment_dir=tmp_path)
+
+    assert validation["status"] == "ready"
+    assert validation["issue_count"] == 0
+
+
 def test_review_uses_same_physical_attachment_check(tmp_path):
     record = {
         "分类": "发票",

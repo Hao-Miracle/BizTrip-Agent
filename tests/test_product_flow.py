@@ -103,3 +103,57 @@ def test_one_config_one_search_llm_blindspot_date_boundary_and_package(monkeypat
     assert Path(result["xlsx_path"]).exists()
     assert {path.name for path in (package_dir / "原件").iterdir()} == {"2_stay.pdf", "3_train.pdf"}
     assert not any("outside" in path.name for path in package_dir.rglob("*"))
+
+
+def test_relevant_email_without_attachment_is_archived_as_source_evidence(monkeypatch, tmp_path):
+    message = EmailMessage()
+    message["Subject"] = "电子发票通知"
+    message["From"] = "invoice@example.com"
+    message.set_content("金额：88.00 日期：2026-07-10")
+
+    class FakeIMAP:
+        def __init__(self, _server, _port):
+            pass
+
+        def login(self, _account, _password):
+            pass
+
+        def select(self, _mailbox):
+            pass
+
+        def search(self, _charset, _query):
+            return "OK", [b"1"]
+
+        def fetch(self, _message_id, _query):
+            return "OK", [(b"RFC822", message.as_bytes())]
+
+        def logout(self):
+            pass
+
+    monkeypatch.setattr(agent_report, "get_email_config", lambda: ("account", "token", "imap.example.com", 993))
+    monkeypatch.setattr(agent_report.imaplib, "IMAP4_SSL", FakeIMAP)
+    monkeypatch.setattr(agent_report, "llm_available", lambda: False)
+    monkeypatch.setattr(
+        agent_report,
+        "extract_record",
+        lambda _body, _subject, _category, use_llm=False: {
+            "分类": "发票",
+            "方法": "规则",
+            "金额": 88.0,
+            "日期": "2026-07-10",
+            "商家": "测试商店",
+        },
+    )
+
+    result = agent_report.main(
+        start="2026-07-01",
+        end="2026-07-30",
+        output_dir=str(tmp_path),
+        interactive=False,
+    )
+
+    assert result["agent_task"]["status"] == "completed"
+    assert result["records"][0]["附件"].endswith("_邮件原文.eml")
+    evidence = Path(result["package_dir"]) / "原件" / result["records"][0]["附件"]
+    assert evidence.exists()
+    assert b"Subject:" in evidence.read_bytes()
