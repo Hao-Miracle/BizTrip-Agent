@@ -352,8 +352,10 @@ def main(
 
     conn.logout()
 
+    records = _filter_records_by_requested_dates(records, start, end)
+
     if not records:
-        print('\n未发现出差相关邮件')
+        print('\n所选日期范围内未发现可用的差旅凭证')
         return
 
     for index, record in enumerate(records, 1):
@@ -499,6 +501,28 @@ def _build_search_query(start, end, count):
     if parts:
         return ' '.join(parts), '~'.join(display), False
     return 'ALL', f'最近{count}封', True
+
+
+def _filter_records_by_requested_dates(records, start, end):
+    """Keep undated records for review, but never include a dated record outside the requested range."""
+    from biztrip_agent.validation import _parse_date
+
+    start_date = _parse_date(start) if start else None
+    end_date = _parse_date(end) if end else None
+    if not start_date and not end_date:
+        return records
+    filtered = []
+    for record in records:
+        record_date = _parse_date(record.get('日期'))
+        if record_date is None:
+            filtered.append(record)
+        elif start_date and record_date < start_date:
+            continue
+        elif end_date and record_date > end_date:
+            continue
+        else:
+            filtered.append(record)
+    return filtered
 
 
 def _get_pdf_attachments_raw(msg):

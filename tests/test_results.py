@@ -5,7 +5,13 @@ from openpyxl import load_workbook
 
 from biztrip_agent.cli import main
 from biztrip_agent.results import load_results_json, write_results_json
-from phase2.agent_report import _attachments_for_pdf, _build_search_query, enrich_records_from_attachments, infer_vendor
+from phase2.agent_report import (
+    _attachments_for_pdf,
+    _build_search_query,
+    _filter_records_by_requested_dates,
+    enrich_records_from_attachments,
+    infer_vendor,
+)
 
 
 def test_write_results_json_persists_summary_and_records(tmp_path):
@@ -175,6 +181,20 @@ def test_search_query_limits_recent_only_without_dates():
     assert search_cmd == "ALL"
     assert scan_label == "最近60封"
     assert limit_recent is True
+
+
+def test_final_records_cannot_cross_requested_date_range():
+    records = [
+        {"日期": "2026-05-31", "主题": "范围前"},
+        {"日期": "2026-06-01", "主题": "范围内"},
+        {"日期": "2026年07月30日", "主题": "范围内结束"},
+        {"日期": "2026-07-31", "主题": "范围后"},
+        {"日期": "", "主题": "日期待识别"},
+    ]
+
+    filtered = _filter_records_by_requested_dates(records, "2026-06-01", "2026-07-30")
+
+    assert [record["主题"] for record in filtered] == ["范围内", "范围内结束", "日期待识别"]
 
 
 def test_split_flight_record_keeps_only_its_own_pdf_attachment():

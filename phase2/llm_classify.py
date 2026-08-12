@@ -152,20 +152,18 @@ def classify_email(subject, sender, body_preview, use_llm=True):
     分类单封邮件。
 
     策略：
-    1. 先尝试 LLM 分类
-    2. 如果 LLM 不可用或置信度 < 0.7，降级到规则引擎
+    1. 规则能可靠识别时直接返回
+    2. 规则无法识别时才调用 LLM
     3. 返回统一格式
     """
-    # 先走 LLM
-    llm_result = llm_classify(subject, sender, body_preview) if use_llm else None
+    rule_result = rule_classify(sender, subject)
+    if rule_result['method'] != '无匹配':
+        return rule_result
 
+    llm_result = llm_classify(subject, sender, body_preview) if use_llm else None
     if llm_result and llm_result['confidence'] >= CONFIDENCE_THRESHOLD:
         return llm_result
 
-    # 降级：规则引擎
-    rule_result = rule_classify(sender, subject)
-
-    # 如果 LLM 给出了结果但置信度低，标记为 LLM+降级
     if llm_result:
         return {**rule_result, 'llm_category': llm_result['category'], 'llm_confidence': llm_result['confidence']}
 

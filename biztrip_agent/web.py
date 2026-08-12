@@ -52,7 +52,12 @@ class BizTripWebHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
         if parsed.path in {"/", "/index.html"}:
-            self._send_html(render_home())
+            job_id = parse_qs(parsed.query).get("job", [""])[0]
+            job = _job_snapshot(job_id) if job_id else None
+            if job and job.get("status") == "completed":
+                self._send_html(render_home(files=job.get("files"), result_summary=job.get("summary"), show_current_result=True))
+            else:
+                self._send_html(render_home())
             return
         if parsed.path.startswith("/jobs/"):
             self._send_json(_job_snapshot(parsed.path.rsplit("/", 1)[-1]))
@@ -126,7 +131,7 @@ class BizTripWebHandler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
 
-def render_home(message=None, error=None, files=None, result_summary=None):
+def render_home(message=None, error=None, files=None, result_summary=None, show_current_result=False):
     """Render the local web UI."""
     account_ready = _account_ready()
     message_html = ""
@@ -137,11 +142,9 @@ def render_home(message=None, error=None, files=None, result_summary=None):
     files_html = _files_html(files or [])
     readiness_html = _readiness_html(readiness_status())
     config_html = _config_html()
-    show_saved_results = account_ready and not _using_temporary_env()
-    saved_result = _latest_result_payload(_default_output_dir()) if show_saved_results else None
-    recent_html = _recent_results_html() if show_saved_results else ""
-    saved_summary = _result_summary(payload_result=saved_result) if saved_result else None
-    summary_html = _summary_html(result_summary or saved_summary) if result_summary or saved_summary else ""
+    saved_result = _latest_result_payload(_default_output_dir()) if show_current_result else None
+    recent_html = _files_html(files or [])
+    summary_html = _summary_html(result_summary) if result_summary else ""
     resolution_html = _agent_resolution_html(payload_result=saved_result) if saved_result else ""
     return f"""<!doctype html>
 <html lang="zh-CN">
@@ -387,7 +390,7 @@ def render_home(message=None, error=None, files=None, result_summary=None):
       if (job.status === "queued" || job.status === "running") {{
         setTimeout(() => pollJob(jobId), 1200);
       }} else if (job.status === "completed") {{
-        setTimeout(() => window.location.reload(), 500);
+        setTimeout(() => window.location.assign(`/?job=${{jobId}}`), 500);
       }}
     }}
     function escapeHtml(value) {{

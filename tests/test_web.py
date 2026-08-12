@@ -97,7 +97,7 @@ def test_web_env_path_can_use_temporary_first_run_config(monkeypatch, tmp_path):
     assert "生成文件" not in html
 
 
-def test_web_hides_saved_results_until_account_is_ready(monkeypatch, tmp_path):
+def test_web_never_shows_saved_results_on_fresh_home(monkeypatch, tmp_path):
     env_path = tmp_path / ".env"
     output_dir = tmp_path / "output"
     output_dir.mkdir()
@@ -122,9 +122,9 @@ def test_web_hides_saved_results_until_account_is_ready(monkeypatch, tmp_path):
     env_path.write_text("EMAIL_ACCOUNT=user@qq.com\nEMAIL_PASSWORD=token\n", encoding="utf-8")
     html = render_home()
 
-    assert "旧结果" in html
-    assert "最近结果" in html
-    assert "生成文件" in html
+    assert "旧结果" not in html
+    assert "最近结果" not in html
+    assert "生成文件" not in html
 
 
 def test_first_run_onboarding_guides_account_setup():
@@ -583,3 +583,18 @@ def test_web_home_supports_head_request():
 
     assert response.status == 200
     assert int(response.getheader("Content-Length")) > 0
+
+
+def test_home_does_not_show_saved_results_from_previous_run(monkeypatch, tmp_path):
+    state_dir = tmp_path / ".biztrip"
+    state_dir.mkdir(parents=True)
+    (state_dir / "records_old.json").write_text(
+        '{"scan_label":"旧记录","summary":{"record_count":99}}',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("biztrip_agent.web._default_output_dir", lambda: tmp_path)
+
+    html = render_home()
+
+    assert "旧记录" not in html
+    assert ">99<" not in html

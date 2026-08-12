@@ -4,6 +4,8 @@ from common.utils import format_chinese_date
 from phase2.llm_classify import classify_email
 from phase2.llm_extract import extract_record
 from phase2.llm_aggregate import aggregate_trips
+import phase2.llm_classify as llm_classify_module
+import phase2.llm_extract as llm_extract_module
 
 
 def test_classifies_known_travel_platforms_without_llm():
@@ -17,6 +19,38 @@ def test_classifies_known_travel_platforms_without_llm():
     for sender, subject, expected in cases:
         result = classify_email(subject, sender, "", use_llm=False)
         assert result["category"] == expected
+
+
+def test_llm_classification_only_handles_rule_unknowns(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        llm_classify_module,
+        "llm_classify",
+        lambda subject, sender, body: calls.append(subject) or {"category": "酒店", "confidence": 0.95, "method": "LLM"},
+    )
+
+    known = classify_email("酒店预订成功", "noreply@huazhuhotels.com", "", use_llm=True)
+    unknown = classify_email("Your itinerary is ready", "travel@example.net", "住宿确认", use_llm=True)
+
+    assert known["method"] != "LLM"
+    assert unknown["method"] == "LLM"
+    assert calls == ["Your itinerary is ready"]
+
+
+def test_llm_extraction_only_fills_incomplete_rule_result(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        llm_extract_module,
+        "llm_extract",
+        lambda body, category: calls.append(body) or {"分类": category, "方法": "LLM", "金额": 299.0, "日期": "2026-07-08"},
+    )
+
+    complete = extract_record("金额：88.00 日期：2026-07-07", "发票", "发票", use_llm=True)
+    incomplete = extract_record("住宿确认，信息见附件", "酒店确认", "酒店", use_llm=True)
+
+    assert complete["方法"] == "规则"
+    assert incomplete["方法"] == "LLM补全"
+    assert calls == ["住宿确认，信息见附件"]
 
 
 def test_skips_irrelevant_email_without_llm():
