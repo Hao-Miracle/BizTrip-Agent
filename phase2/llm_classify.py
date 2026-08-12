@@ -16,6 +16,11 @@ import json
 import re
 import sys
 
+try:
+    from .llm_options import structured_output_options
+except ImportError:
+    from llm_options import structured_output_options
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from common.rules import DOMAIN_RULES, KEYWORD_RULES, SPAM_DOMAINS
 
@@ -98,6 +103,7 @@ def llm_classify(subject, sender, body_preview):
             messages=[{'role': 'user', 'content': prompt}],
             temperature=0.0,
             max_tokens=100,
+            **structured_output_options(model),
         )
         raw = resp.choices[0].message.content.strip()
 

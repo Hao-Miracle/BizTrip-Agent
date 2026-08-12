@@ -4,6 +4,7 @@ import json
 import re
 
 from .llm_extract import _get_client, _get_model
+from .llm_options import structured_output_options
 
 
 ISSUE_FIELDS = {
@@ -42,14 +43,16 @@ def resolve_evidence(record, issue_codes, attachment_text="", min_confidence=0.9
 金额只返回数字，日期使用 YYYY-MM-DD。"""
 
     try:
+        model = _get_model()
         response = client.chat.completions.create(
-            model=_get_model(),
+            model=model,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
             ],
             temperature=0.0,
             max_tokens=600,
+            **structured_output_options(model),
         )
         raw = response.choices[0].message.content.strip()
         match = re.search(r"\{[\s\S]*\}", raw)

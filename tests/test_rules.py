@@ -4,6 +4,7 @@ from common.utils import format_chinese_date
 from phase2.llm_classify import classify_email
 from phase2.llm_extract import extract_record
 from phase2.llm_aggregate import aggregate_trips
+from phase2.llm_options import structured_output_options
 import phase2.llm_classify as llm_classify_module
 import phase2.llm_extract as llm_extract_module
 
@@ -51,6 +52,23 @@ def test_llm_extraction_only_fills_incomplete_rule_result(monkeypatch):
     assert complete["方法"] == "规则"
     assert incomplete["方法"] == "LLM补全"
     assert calls == ["住宿确认，信息见附件"]
+
+
+def test_deepseek_v4_structured_calls_disable_thinking():
+    assert structured_output_options("deepseek-v4-flash") == {"extra_body": {"enable_thinking": False}}
+    assert structured_output_options("example-chat") == {}
+
+
+def test_rule_aggregation_normalizes_dates_and_keeps_unknown_destinations_separate():
+    records = [
+        {"分类": "发票", "日期": "2026年06月02日", "目的地": "", "金额": 10},
+        {"分类": "发票", "日期": "2026-06-01", "目的地": "", "金额": 20},
+    ]
+
+    trips = aggregate_trips(records, use_llm=False)
+
+    assert len(trips) == 2
+    assert [trip["start_date"] for trip in trips] == ["2026-06-01", "2026-06-02"]
 
 
 def test_skips_irrelevant_email_without_llm():

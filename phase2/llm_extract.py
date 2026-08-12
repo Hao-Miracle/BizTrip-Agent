@@ -15,6 +15,11 @@ import os
 import json
 import re
 
+try:
+    from .llm_options import structured_output_options
+except ImportError:
+    from llm_options import structured_output_options
+
 
 _client = None
 
@@ -188,6 +193,7 @@ def llm_extract(body, category):
             messages=[{'role': 'user', 'content': prompt}],
             temperature=0.0,
             max_tokens=500,
+            **structured_output_options(model),
         )
         raw = resp.choices[0].message.content.strip()
 
