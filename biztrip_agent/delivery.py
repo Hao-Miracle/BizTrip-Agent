@@ -3,7 +3,7 @@
 import shutil
 from pathlib import Path
 
-from biztrip_agent.results import output_timestamp
+from biztrip_agent.results import output_label, output_timestamp
 from biztrip_agent.validation import validate_reimbursement
 
 
@@ -15,7 +15,7 @@ def create_delivery_package(records, trips, output_dir, attachment_dir, scan_lab
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    package_dir = _unique_package_dir(output_dir)
+    package_dir = _unique_package_dir(output_dir, scan_label)
     originals_dir = package_dir / "原件"
     package_dir.mkdir()
     originals_dir.mkdir()
@@ -42,8 +42,8 @@ def create_delivery_package(records, trips, output_dir, attachment_dir, scan_lab
     }
 
 
-def _unique_package_dir(output_dir):
-    base = output_dir / f"报销包_{output_timestamp()}"
+def _unique_package_dir(output_dir, scan_label):
+    base = output_dir / f"报销包_{output_label(scan_label)}_{output_timestamp()}"
     candidate = base
     index = 1
     while candidate.exists():

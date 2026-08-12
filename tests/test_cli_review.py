@@ -59,7 +59,7 @@ def test_review_flags_missing_fields(tmp_path):
     assert "待确认行程归属" in html
 
 
-def test_validation_flags_duplicates_and_identifier_conflicts():
+def test_validation_allows_multiple_items_in_one_order():
     records = [
         {
             "分类": "机票",
@@ -82,12 +82,44 @@ def test_validation_flags_duplicates_and_identifier_conflicts():
 
     validation = validate_reimbursement(records, trips)
 
+    assert validation["status"] == "ready"
+    assert validation["affected_count"] == 0
+
+
+def test_validation_flags_exact_duplicate_order_items():
+    records = [
+        {"分类": "机票", "平台": "去哪儿网", "金额": 1280.0, "日期": "2026-07-10", "订单号": "QD001", "附件": "a.pdf"},
+        {"分类": "机票", "平台": "去哪儿网", "金额": 1280.0, "日期": "2026-07-10", "订单号": "QD001", "附件": "b.pdf"},
+    ]
+
+    validation = validate_reimbursement(records, [{"records": records}])
+
     assert validation["status"] == "needs_review"
-    assert validation["affected_count"] == 2
-    assert all(
-        any(issue["code"] == "identifier_conflict" for issue in result["issues"])
-        for result in validation["records"]
-    )
+    assert all(any(issue["code"] == "possible_duplicate" for issue in row["issues"]) for row in validation["records"])
+
+
+def test_validation_allows_multiple_passenger_tickets_in_one_booking():
+    records = [
+        {"分类": "机票", "平台": "去哪儿网", "金额": 1506.5, "日期": "2025-07-23", "订单号": "QD001", "出行人": "甲", "附件": "a.pdf"},
+        {"分类": "机票", "平台": "去哪儿网", "金额": 1506.5, "日期": "2025-07-23", "订单号": "QD001", "出行人": "乙", "附件": "b.pdf"},
+    ]
+
+    validation = validate_reimbursement(records, [{"records": records}])
+
+    assert validation["status"] == "ready"
+    assert validation["issue_count"] == 0
+
+
+def test_validation_flags_conflicting_invoice_numbers():
+    records = [
+        {"分类": "发票", "供应商": "商店", "金额": 20.0, "日期": "2026-07-10", "发票号码": "INV001", "附件": "a.pdf"},
+        {"分类": "发票", "供应商": "商店", "金额": 30.0, "日期": "2026-07-10", "发票号码": "INV001", "附件": "b.pdf"},
+    ]
+
+    validation = validate_reimbursement(records, [{"records": records}])
+
+    assert validation["status"] == "needs_review"
+    assert all(any(issue["code"] == "identifier_conflict" for issue in row["issues"]) for row in validation["records"])
 
 
 def test_validation_marks_complete_records_ready():
@@ -178,6 +210,28 @@ def test_validation_checks_physical_attachment_when_directory_is_provided(tmp_pa
     assert "unreadable_attachment" not in {
         issue["code"] for issue in readable["records"][0]["issues"]
     }
+
+
+def test_validation_accepts_complete_email_source_evidence(tmp_path):
+    record = {
+        "分类": "发票",
+        "供应商": "测试商店",
+        "金额": 20.0,
+        "日期": "2026-08-01",
+        "附件": "invoice.eml",
+    }
+    long_received_header = b"Received: " + (b"mail-hop " * 20) + b"\r\n"
+    (tmp_path / "invoice.eml").write_bytes(
+        long_received_header
+        + b"From: invoice@example.com\r\n"
+        + b"Subject: Invoice notice\r\n"
+        + b"\r\nInvoice details"
+    )
+
+    validation = validate_reimbursement([record], [], attachment_dir=tmp_path)
+
+    assert validation["status"] == "ready"
+    assert validation["issue_count"] == 0
 
 
 def test_review_uses_same_physical_attachment_check(tmp_path):

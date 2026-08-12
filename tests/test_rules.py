@@ -77,6 +77,47 @@ def test_skips_irrelevant_email_without_llm():
     assert result["category"] == "不相关"
 
 
+def test_travel_platform_domain_does_not_make_marketing_email_a_flight():
+    result = classify_email(
+        "【功能介绍】会员体系互通：快速升级 权益尽享(AD)",
+        "newsletter@ctrip.com",
+        "会员权益介绍",
+        use_llm=False,
+    )
+
+    assert result["category"] == "不相关"
+
+
+def test_invalid_rule_date_triggers_llm_recovery(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        llm_extract_module,
+        "llm_extract",
+        lambda body, category: calls.append(body)
+        or {"分类": category, "方法": "LLM", "金额": 111.3, "日期": "2022-08-25"},
+    )
+
+    result = extract_record("金额：111.30 日期：2252-08/25", "高德打车电子发票", "发票", use_llm=True)
+
+    assert result["日期"] == "2022-08-25"
+    assert result["方法"] == "LLM补全"
+    assert len(calls) == 1
+
+
+def test_invalid_date_is_not_restored_when_llm_cannot_recover(monkeypatch):
+    monkeypatch.setattr(llm_extract_module, "llm_extract", lambda _body, _category: None)
+
+    result = extract_record("金额：7.60 日期：6773-99-2", "高德打车电子发票", "网约车", use_llm=True)
+
+    assert result["日期"] == ""
+
+
+def test_high_de_taxi_invoice_is_classified_as_taxi():
+    result = classify_email("高德打车电子发票", "invoice@example.com", "", use_llm=False)
+
+    assert result["category"] == "网约车"
+
+
 def test_extracts_flight_amount_date_and_route_without_llm():
     body = "您的机票已出票。金额1280.00元 日期：2026-07-10 上海→深圳 订单号：QD20260710001"
 

@@ -2,13 +2,15 @@
 
 from collections import defaultdict
 from datetime import datetime
+from email import policy
+from email.parser import BytesParser
 import math
 from pathlib import Path
 
 
 TRIP_CATEGORIES = {"机票", "火车票", "酒店", "网约车", "门票"}
-IDENTIFIER_FIELDS = ("订单号", "发票号码", "发票号")
-SUPPORTED_ATTACHMENT_SUFFIXES = {".pdf", ".zip", ".jpg", ".jpeg", ".png", ".heic"}
+UNIQUE_IDENTIFIER_FIELDS = ("发票号码", "发票号")
+SUPPORTED_ATTACHMENT_SUFFIXES = {".pdf", ".zip", ".jpg", ".jpeg", ".png", ".heic", ".eml"}
 
 
 def validate_reimbursement(records, trips, attachment_dir=None):
@@ -78,7 +80,7 @@ def validate_reimbursement(records, trips, attachment_dir=None):
 def _flag_identifier_collisions(records, results):
     groups = defaultdict(list)
     for index, record in enumerate(records):
-        for field in IDENTIFIER_FIELDS:
+        for field in UNIQUE_IDENTIFIER_FIELDS:
             value = _text(record.get(field))
             if value:
                 groups[(field, value)].append(index)
@@ -91,6 +93,28 @@ def _flag_identifier_collisions(records, results):
         label = f"{field} {value} 数据冲突" if conflict else f"疑似重复（{field} {value}）"
         for index in indices:
             _add_issue(results[index], code, label)
+
+    order_groups = defaultdict(list)
+    for index, record in enumerate(records):
+        order_number = _text(record.get("订单号"))
+        amount = _normalized_value(record.get("金额"))
+        date = _normalized_value(record.get("日期"))
+        if order_number and amount and date:
+            order_groups[(order_number, amount, date)].append(index)
+    for (order_number, _amount, _date), indices in order_groups.items():
+        if len(indices) < 2:
+            continue
+        grouped = [records[index] for index in indices]
+        if all(record.get("分类") == "机票" for record in grouped):
+            passengers = {
+                _text(record.get("出行人") or record.get("乘机人") or record.get("乘车人"))
+                for record in grouped
+            }
+            passengers.discard("")
+            if len(passengers) == len(grouped):
+                continue
+        for index in indices:
+            _add_issue(results[index], "possible_duplicate", f"疑似重复（订单号 {order_number}，日期和金额相同）")
 
 
 def _flag_reused_attachments(records, results):
@@ -169,11 +193,19 @@ def _validate_attachment_names(record, result, attachment_dir=None):
 
 def _readable_attachment(path, suffix):
     try:
-        data = path.read_bytes()[:64]
+        raw_data = path.read_bytes()
     except OSError:
         return False
-    if not data:
+    if not raw_data:
         return False
+    if suffix == ".eml":
+        try:
+            message = BytesParser(policy=policy.default).parsebytes(raw_data)
+        except (TypeError, ValueError):
+            return False
+        return bool(message.get("Subject") and message.get("From"))
+
+    data = raw_data[:64]
     checks = {
         ".pdf": data.lstrip().startswith(b"%PDF"),
         ".zip": data.startswith(b"PK\x03\x04") or data.startswith(b"PK\x05\x06"),

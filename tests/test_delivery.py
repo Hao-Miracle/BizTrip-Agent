@@ -24,6 +24,8 @@ def test_delivery_package_contains_only_excel_and_referenced_originals(tmp_path)
     )
 
     assert package["package_dir"].name.startswith("报销包_")
+    assert "八月报销" in package["package_dir"].name
+    assert "八月报销" in package["excel_path"].name
     assert package["excel_path"].exists()
     assert (package["package_dir"] / "原件" / "used.pdf").exists()
     assert not (package["package_dir"] / "原件" / "unused.pdf").exists()
