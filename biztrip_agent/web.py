@@ -386,6 +386,8 @@ def render_home(message=None, error=None, files=None, result_summary=None):
       }}
       if (job.status === "queued" || job.status === "running") {{
         setTimeout(() => pollJob(jobId), 1200);
+      }} else if (job.status === "completed") {{
+        setTimeout(() => window.location.reload(), 500);
       }}
     }}
     function escapeHtml(value) {{
@@ -518,6 +520,17 @@ def _write_env_values(env_path, updates):
         if key not in seen:
             lines.append(f"{key}={value}")
     env_path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+    for key, value in updates.items():
+        os.environ[key] = value
+    _reset_llm_clients()
+
+
+def _reset_llm_clients():
+    """Make newly saved model settings effective in the running web process."""
+    for module_name in ("phase2.llm_classify", "phase2.llm_extract", "phase2.llm_aggregate"):
+        module = sys.modules.get(module_name)
+        if module is not None and hasattr(module, "_client"):
+            module._client = None
 
 
 def _run_demo(form):
@@ -817,7 +830,7 @@ def _latest_files(output_dir):
     output_dir = Path(output_dir)
     if not output_dir.exists():
         return []
-    names = ["报销包_*/*.xlsx"]
+    names = ["报销包_*/*.xlsx", "review_*.html"]
     files = []
     for pattern in names:
         files.extend(output_dir.glob(pattern))
@@ -841,6 +854,9 @@ def _result_summary(output_dir=None, payload_result=None):
         return None
     records, payload = payload_result
     summary = payload.get("summary", {})
+    task_mode = payload.get("agent_task", {}).get("mode", "rules")
+    extraction_methods = [str(record.get("提取方式") or "") for record in payload.get("records", [])]
+    llm_count = sum("LLM" in method.upper() for method in extraction_methods)
     return {
         "record_count": summary.get("record_count", 0),
         "trip_count": summary.get("trip_count", 0),
@@ -851,6 +867,10 @@ def _result_summary(output_dir=None, payload_result=None):
         "affected_count": summary.get("affected_count", 0),
         "issue_count": summary.get("issue_count", 0),
         "scan_label": payload.get("scan_label") or "最近结果",
+        "task_mode": task_mode,
+        "llm_count": llm_count,
+        "rule_count": max(0, len(extraction_methods) - llm_count),
+        "review_path": payload.get("files", {}).get("review", ""),
         "json_path": str(records),
     }
 
@@ -1115,10 +1135,18 @@ def _summary_html(summary):
         verdict = '<div class="notice warn"><strong>没有可提交的记录</strong><br>请检查查询时间范围。</div>'
     else:
         verdict = '<div class="notice warn">这是旧版生成结果，请重新生成后查看完整性结论。</div>'
+    if summary.get("task_mode") == "agent":
+        mode = (
+            f'Agent 模式：LLM 处理 {int(summary.get("llm_count") or 0)} 条，'
+            f'规则兜底 {int(summary.get("rule_count") or 0)} 条'
+        )
+    else:
+        mode = "规则模式：本次没有调用 LLM"
     return (
         '<section class="results">'
         "<h2>最近结果</h2>"
         f'<div class="sub">{html.escape(str(summary.get("scan_label") or "最近结果"))}</div>'
+        f'<div class="sub">{html.escape(mode)}</div>'
         f'{verdict}'
         '<div class="result-grid">'
         f'<div class="result-metric"><strong>¥ {float(summary.get("total_amount") or 0):,.2f}</strong><span>已识别金额</span></div>'

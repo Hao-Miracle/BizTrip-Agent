@@ -1,5 +1,7 @@
 from http.client import HTTPConnection
 from threading import Thread
+import json
+import os
 import time
 
 from http.server import ThreadingHTTPServer
@@ -327,6 +329,31 @@ def test_result_summary_reads_latest_records_json(tmp_path):
     assert summary["submission_status"] == "unknown"
 
 
+def test_result_summary_reports_actual_llm_usage(tmp_path):
+    state_dir = tmp_path / ".biztrip"
+    state_dir.mkdir()
+    (state_dir / "records_20260812_120000.json").write_text(
+        json.dumps(
+            {
+                "scan_label": "测试范围",
+                "summary": {"record_count": 2},
+                "records": [{"提取方式": "LLM"}, {"提取方式": "规则"}],
+                "files": {"review": "output/review_test.html"},
+                "agent_task": {"mode": "agent"},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    summary = _result_summary(tmp_path)
+
+    assert summary["task_mode"] == "agent"
+    assert summary["llm_count"] == 1
+    assert summary["rule_count"] == 1
+    assert "Agent 模式" in _summary_html(summary)
+
+
 def test_summary_html_shows_submission_verdict():
     html = _summary_html(
         {
@@ -431,6 +458,19 @@ def test_env_writer_preserves_comments_and_updates_values(tmp_path):
     assert "EMAIL_PASSWORD=old-token" in text
     assert "EMAIL_IMAP_SERVER=imap.example.com" in text
     assert _read_env_values(env_path)["EMAIL_ACCOUNT"] == "new@example.com"
+
+
+def test_env_writer_updates_running_process_and_resets_llm_client(monkeypatch, tmp_path):
+    import phase2.llm_extract as llm_extract
+
+    env_path = tmp_path / ".env"
+    monkeypatch.setenv("LLM_BASE_URL", "https://old.example.com/v1")
+    llm_extract._client = False
+
+    _write_env_values(env_path, {"LLM_BASE_URL": "https://new.example.com/v1"})
+
+    assert os.environ["LLM_BASE_URL"] == "https://new.example.com/v1"
+    assert llm_extract._client is None
 
 
 def test_llm_config_saves_without_overwriting_blank_secret(monkeypatch, tmp_path):

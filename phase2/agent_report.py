@@ -427,12 +427,12 @@ def main(
         xlsx_path = package['excel_path']
         package_dir = package['package_dir']
     review_path = None
-    if review:
+    if review or agent_task['status'] != 'completed':
         from biztrip_agent.review import generate_review_html
         review_path = generate_review_html(
             records,
             trips,
-            state_dir,
+            output_dir if agent_task['status'] != 'completed' else state_dir,
             scan_label,
             excel_path=xlsx_path,
             attachment_dir=attach_dir,
