@@ -14,6 +14,7 @@
 import os
 import json
 import re
+from datetime import datetime
 
 try:
     from .llm_options import structured_output_options
@@ -236,9 +237,20 @@ def _normalize(data, category):
 
 def quality_check(llm_result):
     """检查提取质量：关键字段缺失率"""
+    missing = int(not llm_result.get('金额')) + int(not _valid_date(llm_result.get('日期')))
     key_fields = ['金额', '日期']
-    missing = sum(1 for f in key_fields if not llm_result.get(f))
     return missing / len(key_fields) < 0.5  # 允许缺一个关键字段
+
+
+def _valid_date(value):
+    text = str(value or '').strip()
+    for date_format in ('%Y-%m-%d', '%Y年%m月%d日'):
+        try:
+            datetime.strptime(text, date_format)
+            return True
+        except ValueError:
+            continue
+    return False
 
 
 # ====== 正则降级（精简版，复用 Phase 1 逻辑）======
@@ -315,6 +327,8 @@ def extract_record(body, subject, category, use_llm=True):
     3. LLM 结果仍不完整时保留规则结果
     """
     rule_result = rule_extract(body, subject, category)
+    if rule_result.get('日期') and not _valid_date(rule_result.get('日期')):
+        rule_result['日期'] = ''
     if quality_check(rule_result) or not use_llm:
         return rule_result
 

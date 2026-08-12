@@ -128,22 +128,20 @@ def llm_classify(subject, sender, body_preview):
 def rule_classify(sender, subject):
     """正则降级分类"""
     sl = sender.lower()
+    subject_lower = subject.lower()
 
     # 黑名单
     if any(d in sl for d in SPAM_DOMAINS):
         return {'category': '不相关', 'confidence': 1.0, 'method': '黑名单'}
 
-    # 域名匹配
-    for cat, domains in DOMAIN_RULES.items():
-        for d in domains:
-            if d in sl:
-                return {'category': cat, 'confidence': 0.9, 'method': '域名匹配'}
-
-    # 关键词匹配
+    # 主题证据优先。平台域名只能增强置信度，不能单独证明它是报销邮件。
     for cat, keywords in KEYWORD_RULES.items():
         for kw in keywords:
-            if kw.lower() in subject.lower():
-                return {'category': cat, 'confidence': 0.7, 'method': '关键词匹配'}
+            if kw.lower() in subject_lower:
+                domains = DOMAIN_RULES.get(cat, [])
+                method = '域名+关键词' if any(domain in sl for domain in domains) else '关键词匹配'
+                confidence = 0.9 if method == '域名+关键词' else 0.7
+                return {'category': cat, 'confidence': confidence, 'method': method}
 
     return {'category': '不相关', 'confidence': 0.5, 'method': '无匹配'}
 
