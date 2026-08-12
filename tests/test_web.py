@@ -337,7 +337,7 @@ def test_result_summary_reports_actual_llm_usage(tmp_path):
             {
                 "scan_label": "测试范围",
                 "summary": {"record_count": 2},
-                "records": [{"提取方式": "LLM"}, {"提取方式": "规则"}],
+                "records": [{"方法": "LLM补全"}, {"方法": "规则"}],
                 "files": {"review": "output/review_test.html"},
                 "agent_task": {"mode": "agent"},
             },

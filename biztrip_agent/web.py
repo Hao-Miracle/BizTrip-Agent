@@ -858,7 +858,10 @@ def _result_summary(output_dir=None, payload_result=None):
     records, payload = payload_result
     summary = payload.get("summary", {})
     task_mode = payload.get("agent_task", {}).get("mode", "rules")
-    extraction_methods = [str(record.get("提取方式") or "") for record in payload.get("records", [])]
+    extraction_methods = [
+        str(record.get("方法") or record.get("提取方式") or "")
+        for record in payload.get("records", [])
+    ]
     llm_count = sum("LLM" in method.upper() for method in extraction_methods)
     return {
         "record_count": summary.get("record_count", 0),
