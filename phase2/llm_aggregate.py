@@ -11,6 +11,12 @@
 import os
 import json
 import re
+from datetime import datetime
+
+try:
+    from .llm_options import structured_output_options
+except ImportError:
+    from llm_options import structured_output_options
 
 
 _client = None
@@ -105,6 +111,7 @@ def aggregate_trips(records, use_llm=True):
             messages=[{'role': 'user', 'content': prompt}],
             temperature=0.0,
             max_tokens=1000,
+            **structured_output_options(model),
         )
         raw = resp.choices[0].message.content.strip()
 
@@ -180,10 +187,7 @@ def _rule_aggregate(records):
         return []
 
     # 先按日期排序
-    sorted_records = sorted(
-        records,
-        key=lambda r: str(r.get('日期', '') or '')
-    )
+    sorted_records = sorted(records, key=lambda r: _date_key(r.get('日期')))
 
     # 简单策略：目的地相同且没有明确的跨模式 = 同一趟出差
     trips = []
@@ -194,7 +198,7 @@ def _rule_aggregate(records):
         if not dest:
             dest = r.get('出发地', '')  # 如果没有目的地，用出发地判断
 
-        date = r.get('日期', '')
+        date = _normalized_date(r.get('日期'))
 
         if current_trip is None:
             current_trip = {
@@ -203,7 +207,7 @@ def _rule_aggregate(records):
                 'end_date': date,
                 'records': [r],
             }
-        elif current_trip['destination'] == dest:
+        elif dest and current_trip['destination'] == dest:
             current_trip['records'].append(r)
             if date:
                 current_trip['end_date'] = max(current_trip['end_date'], date)
@@ -238,6 +242,20 @@ def _rule_aggregate(records):
         })
 
     return result
+
+
+def _normalized_date(value):
+    text = str(value or '').strip()
+    for format_string in ('%Y-%m-%d', '%Y年%m月%d日'):
+        try:
+            return datetime.strptime(text, format_string).strftime('%Y-%m-%d')
+        except ValueError:
+            continue
+    return text
+
+
+def _date_key(value):
+    return _normalized_date(value)
 
 
 if __name__ == '__main__':

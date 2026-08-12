@@ -15,6 +15,11 @@ import os
 import json
 import re
 
+try:
+    from .llm_options import structured_output_options
+except ImportError:
+    from llm_options import structured_output_options
+
 
 _client = None
 
@@ -188,6 +193,7 @@ def llm_extract(body, category):
             messages=[{'role': 'user', 'content': prompt}],
             temperature=0.0,
             max_tokens=500,
+            **structured_output_options(model),
         )
         raw = resp.choices[0].message.content.strip()
 
@@ -304,20 +310,23 @@ def extract_record(body, subject, category, use_llm=True):
     提取单条记录。
 
     策略：
-    1. 先尝试 LLM 提取
-    2. 质量不合格（关键字段缺失过多）→ 降级到正则
-    3. LLM 不可用 → 直接正则
+    1. 规则提取完整时直接使用
+    2. 规则缺少金额或日期时调用 LLM 补齐
+    3. LLM 结果仍不完整时保留规则结果
     """
-    # 先走 LLM
-    llm_result = llm_extract(body, category) if use_llm else None
-
-    if llm_result and quality_check(llm_result):
-        return llm_result
-
-    # 降级
     rule_result = rule_extract(body, subject, category)
+    if quality_check(rule_result) or not use_llm:
+        return rule_result
+
+    llm_result = llm_extract(body, category)
+    if llm_result and quality_check(llm_result):
+        for key, value in rule_result.items():
+            if value not in ('', None) and not llm_result.get(key):
+                llm_result[key] = value
+        llm_result['方法'] = 'LLM补全'
+        return llm_result
     if llm_result:
-        rule_result['方法'] = 'LLM→规则降级'
+        rule_result['方法'] = '规则（LLM未能补全）'
     return rule_result
 
 

@@ -23,6 +23,7 @@ from urllib.parse import parse_qs, urlparse
 
 JOBS = {}
 JOBS_LOCK = threading.Lock()
+LLM_VALIDATION_CACHE = set()
 MAX_JOBS = 20
 MAX_POST_BYTES = 25 * 1024 * 1024
 
@@ -52,7 +53,12 @@ class BizTripWebHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
         if parsed.path in {"/", "/index.html"}:
-            self._send_html(render_home())
+            job_id = parse_qs(parsed.query).get("job", [""])[0]
+            job = _job_snapshot(job_id) if job_id else None
+            if job and job.get("status") == "completed":
+                self._send_html(render_home(files=job.get("files"), result_summary=job.get("summary"), show_current_result=True))
+            else:
+                self._send_html(render_home())
             return
         if parsed.path.startswith("/jobs/"):
             self._send_json(_job_snapshot(parsed.path.rsplit("/", 1)[-1]))
@@ -126,7 +132,7 @@ class BizTripWebHandler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
 
-def render_home(message=None, error=None, files=None, result_summary=None):
+def render_home(message=None, error=None, files=None, result_summary=None, show_current_result=False):
     """Render the local web UI."""
     account_ready = _account_ready()
     message_html = ""
@@ -137,11 +143,9 @@ def render_home(message=None, error=None, files=None, result_summary=None):
     files_html = _files_html(files or [])
     readiness_html = _readiness_html(readiness_status())
     config_html = _config_html()
-    show_saved_results = account_ready and not _using_temporary_env()
-    saved_result = _latest_result_payload(_default_output_dir()) if show_saved_results else None
-    recent_html = _recent_results_html() if show_saved_results else ""
-    saved_summary = _result_summary(payload_result=saved_result) if saved_result else None
-    summary_html = _summary_html(result_summary or saved_summary) if result_summary or saved_summary else ""
+    saved_result = _latest_result_payload(_default_output_dir()) if show_current_result else None
+    recent_html = _files_html(files or [])
+    summary_html = _summary_html(result_summary) if result_summary else ""
     resolution_html = _agent_resolution_html(payload_result=saved_result) if saved_result else ""
     return f"""<!doctype html>
 <html lang="zh-CN">
@@ -386,6 +390,8 @@ def render_home(message=None, error=None, files=None, result_summary=None):
       }}
       if (job.status === "queued" || job.status === "running") {{
         setTimeout(() => pollJob(jobId), 1200);
+      }} else if (job.status === "completed") {{
+        setTimeout(() => window.location.assign(`/?job=${{jobId}}`), 500);
       }}
     }}
     function escapeHtml(value) {{
@@ -518,6 +524,17 @@ def _write_env_values(env_path, updates):
         if key not in seen:
             lines.append(f"{key}={value}")
     env_path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+    for key, value in updates.items():
+        os.environ[key] = value
+    _reset_llm_clients()
+
+
+def _reset_llm_clients():
+    """Make newly saved model settings effective in the running web process."""
+    for module_name in ("phase2.llm_classify", "phase2.llm_extract", "phase2.llm_aggregate"):
+        module = sys.modules.get(module_name)
+        if module is not None and hasattr(module, "_client"):
+            module._client = None
 
 
 def _run_demo(form):
@@ -692,6 +709,9 @@ def _preflight_scan(output_dir):
         return "请先配置 Agent 模型接口地址。"
     if not env_flags.get("LLM_MODEL"):
         return "请先配置 Agent 模型名称。"
+    llm_error = _validate_llm_connection()
+    if llm_error:
+        return llm_error
     output_path = Path(output_dir)
     try:
         output_path.mkdir(parents=True, exist_ok=True)
@@ -700,6 +720,40 @@ def _preflight_scan(output_dir):
         probe.unlink()
     except OSError:
         return "输出目录不可写，请换一个目录。"
+    return None
+
+
+def _validate_llm_connection():
+    """Verify model credentials without sending email or reimbursement data."""
+    values = _read_env_values(_env_path())
+    base_url = values.get("LLM_BASE_URL", "").strip()
+    api_key = values.get("LLM_API_KEY", "").strip()
+    model = values.get("LLM_MODEL", "").strip()
+    fingerprint = (base_url, api_key[-8:], model)
+    if fingerprint in LLM_VALIDATION_CACHE:
+        return None
+    try:
+        from openai import OpenAI
+
+        client = OpenAI(api_key=api_key, base_url=base_url, timeout=15.0)
+        response = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": "Reply with OK."}],
+            temperature=0,
+            max_tokens=5,
+        )
+        if not response.choices:
+            return "模型连接失败：服务没有返回有效结果，请检查接口地址和模型名称。"
+    except Exception as exc:
+        lowered = str(exc).lower()
+        if "401" in lowered or "authentication" in lowered or "api key" in lowered:
+            return "模型连接失败：API Key 无效或已失效，请重新填写。"
+        if "model" in lowered and ("not found" in lowered or "invalid" in lowered):
+            return "模型连接失败：模型名称不可用，请向服务商确认正确名称。"
+        if "timeout" in lowered or "connection" in lowered or "network" in lowered:
+            return "模型连接失败：接口地址无法访问，请检查地址和网络。"
+        return "模型连接失败：请检查接口地址、API Key 和模型名称。"
+    LLM_VALIDATION_CACHE.add(fingerprint)
     return None
 
 
@@ -817,7 +871,7 @@ def _latest_files(output_dir):
     output_dir = Path(output_dir)
     if not output_dir.exists():
         return []
-    names = ["报销包_*/*.xlsx"]
+    names = ["报销包_*/*.xlsx", "review_*.html"]
     files = []
     for pattern in names:
         files.extend(output_dir.glob(pattern))
@@ -841,6 +895,12 @@ def _result_summary(output_dir=None, payload_result=None):
         return None
     records, payload = payload_result
     summary = payload.get("summary", {})
+    task_mode = payload.get("agent_task", {}).get("mode", "rules")
+    extraction_methods = [
+        str(record.get("方法") or record.get("提取方式") or "")
+        for record in payload.get("records", [])
+    ]
+    llm_count = sum("LLM" in method.upper() for method in extraction_methods)
     return {
         "record_count": summary.get("record_count", 0),
         "trip_count": summary.get("trip_count", 0),
@@ -851,6 +911,10 @@ def _result_summary(output_dir=None, payload_result=None):
         "affected_count": summary.get("affected_count", 0),
         "issue_count": summary.get("issue_count", 0),
         "scan_label": payload.get("scan_label") or "最近结果",
+        "task_mode": task_mode,
+        "llm_count": llm_count,
+        "rule_count": max(0, len(extraction_methods) - llm_count),
+        "review_path": payload.get("files", {}).get("review", ""),
         "json_path": str(records),
     }
 
@@ -1115,10 +1179,18 @@ def _summary_html(summary):
         verdict = '<div class="notice warn"><strong>没有可提交的记录</strong><br>请检查查询时间范围。</div>'
     else:
         verdict = '<div class="notice warn">这是旧版生成结果，请重新生成后查看完整性结论。</div>'
+    if summary.get("task_mode") == "agent":
+        mode = (
+            f'Agent 模式：LLM 处理 {int(summary.get("llm_count") or 0)} 条，'
+            f'规则兜底 {int(summary.get("rule_count") or 0)} 条'
+        )
+    else:
+        mode = "规则模式：本次没有调用 LLM"
     return (
         '<section class="results">'
         "<h2>最近结果</h2>"
         f'<div class="sub">{html.escape(str(summary.get("scan_label") or "最近结果"))}</div>'
+        f'<div class="sub">{html.escape(mode)}</div>'
         f'{verdict}'
         '<div class="result-grid">'
         f'<div class="result-metric"><strong>¥ {float(summary.get("total_amount") or 0):,.2f}</strong><span>已识别金额</span></div>'

@@ -1,5 +1,7 @@
 from http.client import HTTPConnection
 from threading import Thread
+import json
+import os
 import time
 
 from http.server import ThreadingHTTPServer
@@ -95,7 +97,7 @@ def test_web_env_path_can_use_temporary_first_run_config(monkeypatch, tmp_path):
     assert "生成文件" not in html
 
 
-def test_web_hides_saved_results_until_account_is_ready(monkeypatch, tmp_path):
+def test_web_never_shows_saved_results_on_fresh_home(monkeypatch, tmp_path):
     env_path = tmp_path / ".env"
     output_dir = tmp_path / "output"
     output_dir.mkdir()
@@ -120,9 +122,9 @@ def test_web_hides_saved_results_until_account_is_ready(monkeypatch, tmp_path):
     env_path.write_text("EMAIL_ACCOUNT=user@qq.com\nEMAIL_PASSWORD=token\n", encoding="utf-8")
     html = render_home()
 
-    assert "旧结果" in html
-    assert "最近结果" in html
-    assert "生成文件" in html
+    assert "旧结果" not in html
+    assert "最近结果" not in html
+    assert "生成文件" not in html
 
 
 def test_first_run_onboarding_guides_account_setup():
@@ -296,6 +298,22 @@ def test_scan_preflight_requires_agent_model_config(monkeypatch, tmp_path):
     assert _preflight_scan(tmp_path) == "请先配置 Agent 模型接口地址。"
 
 
+def test_scan_preflight_stops_when_llm_credentials_are_invalid(monkeypatch, tmp_path):
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "EMAIL_ACCOUNT=user@example.com\nEMAIL_PASSWORD=mail-token\n"
+        "LLM_API_KEY=bad-key\nLLM_BASE_URL=https://api.example.com\nLLM_MODEL=model\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("biztrip_agent.web._env_path", lambda: env_path)
+    monkeypatch.setattr(
+        "biztrip_agent.web._validate_llm_connection",
+        lambda: "模型连接失败：API Key 无效或已失效，请重新填写。",
+    )
+
+    assert "API Key 无效" in _preflight_scan(tmp_path / "output")
+
+
 def test_background_job_records_failure():
     def fail():
         raise RuntimeError("authentication failed")
@@ -325,6 +343,31 @@ def test_result_summary_reads_latest_records_json(tmp_path):
     assert summary["trip_count"] == 1
     assert summary["total_amount"] == 456.7
     assert summary["submission_status"] == "unknown"
+
+
+def test_result_summary_reports_actual_llm_usage(tmp_path):
+    state_dir = tmp_path / ".biztrip"
+    state_dir.mkdir()
+    (state_dir / "records_20260812_120000.json").write_text(
+        json.dumps(
+            {
+                "scan_label": "测试范围",
+                "summary": {"record_count": 2},
+                "records": [{"方法": "LLM补全"}, {"方法": "规则"}],
+                "files": {"review": "output/review_test.html"},
+                "agent_task": {"mode": "agent"},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    summary = _result_summary(tmp_path)
+
+    assert summary["task_mode"] == "agent"
+    assert summary["llm_count"] == 1
+    assert summary["rule_count"] == 1
+    assert "Agent 模式" in _summary_html(summary)
 
 
 def test_summary_html_shows_submission_verdict():
@@ -431,6 +474,19 @@ def test_env_writer_preserves_comments_and_updates_values(tmp_path):
     assert "EMAIL_PASSWORD=old-token" in text
     assert "EMAIL_IMAP_SERVER=imap.example.com" in text
     assert _read_env_values(env_path)["EMAIL_ACCOUNT"] == "new@example.com"
+
+
+def test_env_writer_updates_running_process_and_resets_llm_client(monkeypatch, tmp_path):
+    import phase2.llm_extract as llm_extract
+
+    env_path = tmp_path / ".env"
+    monkeypatch.setenv("LLM_BASE_URL", "https://old.example.com/v1")
+    llm_extract._client = False
+
+    _write_env_values(env_path, {"LLM_BASE_URL": "https://new.example.com/v1"})
+
+    assert os.environ["LLM_BASE_URL"] == "https://new.example.com/v1"
+    assert llm_extract._client is None
 
 
 def test_llm_config_saves_without_overwriting_blank_secret(monkeypatch, tmp_path):
@@ -543,3 +599,18 @@ def test_web_home_supports_head_request():
 
     assert response.status == 200
     assert int(response.getheader("Content-Length")) > 0
+
+
+def test_home_does_not_show_saved_results_from_previous_run(monkeypatch, tmp_path):
+    state_dir = tmp_path / ".biztrip"
+    state_dir.mkdir(parents=True)
+    (state_dir / "records_old.json").write_text(
+        '{"scan_label":"旧记录","summary":{"record_count":99}}',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("biztrip_agent.web._default_output_dir", lambda: tmp_path)
+
+    html = render_home()
+
+    assert "旧记录" not in html
+    assert ">99<" not in html
