@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 TRIP_CATEGORIES = {"机票", "火车票", "酒店", "网约车", "门票"}
-IDENTIFIER_FIELDS = ("订单号", "发票号码", "发票号")
+UNIQUE_IDENTIFIER_FIELDS = ("发票号码", "发票号")
 SUPPORTED_ATTACHMENT_SUFFIXES = {".pdf", ".zip", ".jpg", ".jpeg", ".png", ".heic"}
 
 
@@ -78,7 +78,7 @@ def validate_reimbursement(records, trips, attachment_dir=None):
 def _flag_identifier_collisions(records, results):
     groups = defaultdict(list)
     for index, record in enumerate(records):
-        for field in IDENTIFIER_FIELDS:
+        for field in UNIQUE_IDENTIFIER_FIELDS:
             value = _text(record.get(field))
             if value:
                 groups[(field, value)].append(index)
@@ -91,6 +91,19 @@ def _flag_identifier_collisions(records, results):
         label = f"{field} {value} 数据冲突" if conflict else f"疑似重复（{field} {value}）"
         for index in indices:
             _add_issue(results[index], code, label)
+
+    order_groups = defaultdict(list)
+    for index, record in enumerate(records):
+        order_number = _text(record.get("订单号"))
+        amount = _normalized_value(record.get("金额"))
+        date = _normalized_value(record.get("日期"))
+        if order_number and amount and date:
+            order_groups[(order_number, amount, date)].append(index)
+    for (order_number, _amount, _date), indices in order_groups.items():
+        if len(indices) < 2:
+            continue
+        for index in indices:
+            _add_issue(results[index], "possible_duplicate", f"疑似重复（订单号 {order_number}，日期和金额相同）")
 
 
 def _flag_reused_attachments(records, results):
